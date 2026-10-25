@@ -210,10 +210,14 @@
             stopAudioNode();
             initAudioContext();
             
+            // 💡 关键：在播放前再次显式唤醒 AudioContext，防止浏览器因没有直接点击而挂起它
+            if (audioCtx && audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+
             currentDuration = buffer.duration;
             totalTimeText.innerText = formatTime(currentDuration);
 
-            // 💡 核心修复：如果传入的起始位置已经超过或等于音频总时长，直接归零或截断，防止报错
             if (startPos >= currentDuration) {
                 startPos = 0;
             }
@@ -241,7 +245,7 @@
                 currentSourceNode.start(targetAudioTime, startPos);
             } catch (e) {
                 console.error("Audio start 错误:", e);
-                statusText.innerText = "播放启动失败，请重试";
+                statusText.innerText = "播放被浏览器拦截，请点击页面任意处";
                 return;
             }
 
