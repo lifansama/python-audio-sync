@@ -46,11 +46,6 @@
     <h2>多设备零延迟精准同步控制台</h2>
     <div id="status" onclick="manualResumeAudio()">正在连接服务器与初始化音频引擎...（点击此处可手动激活声音）</div>
 
-    <div class="upload-box">
-        <label for="mp3File"><strong>上传新的 MP3 曲目：</strong></label>
-        <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
-    </div>
-
     <div class="progress-container">
         <div class="progress-bar-bg" id="progressBarBg">
             <div class="progress-bar-fill" id="progressBarFill"></div>
@@ -72,6 +67,12 @@
     <div class="controls">
         <button id="playPauseBtn" onclick="togglePlayPause()" class="btn-warning">▶ 播放</button>
         <button onclick="actionWithSync(() => stop())" class="btn-danger">停止</button>
+    </div>
+
+    <!-- 上传新 MP3 模块（已移动到底部状态栏上方） -->
+    <div class="upload-box">
+        <label for="mp3File"><strong>上传新的 MP3 曲目：</strong></label>
+        <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
     </div>
 
     <!-- 底部 NTP 与网络/音频状态监控面板 -->
@@ -172,7 +173,6 @@
         updateAudioStateUI();
     }
 
-    // 定期检测音频状态，确保 UI 实时同步
     setInterval(updateAudioStateUI, 1000);
 
     async function uploadAudioFile() {
