@@ -69,7 +69,7 @@
         <button onclick="actionWithSync(() => stop())" class="btn-danger">停止</button>
     </div>
 
-    <!-- 上传新 MP3 模块（已移动到底部状态栏上方） -->
+    <!-- 上传新 MP3 模块（位于底部状态栏上方） -->
     <div class="upload-box">
         <label for="mp3File"><strong>上传新的 MP3 曲目：</strong></label>
         <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
@@ -292,7 +292,9 @@
                 updateRadioSelection();
             }
 
-            statusText.innerText = `正在准备音频缓存...`;
+            statusText.innerText = `正在准备音频缓存与同步校准...`;
+            
+            // 1. 确保音频优先加载和解码完成
             let buffer = audioBuffers[filename];
             if (!buffer) {
                 buffer = await preloadAndDecode(filename);
@@ -313,8 +315,20 @@
             currentDuration = buffer.duration;
             totalTimeText.innerText = formatTime(currentDuration);
 
-            if (isNaN(startPos) || startPos < 0 || startPos >= currentDuration) {
+            // 2. 动态追赶机制：计算半路加入时因解码滞后的时间，自动快进到正确进度
+            const currentServerTimeNow = Date.now() + timeOffset;
+            if (currentServerTimeNow > targetServerTime) {
+                const lagSeconds = (currentServerTimeNow - targetServerTime) / 1000;
+                startPos += lagSeconds;
+            }
+
+            if (isNaN(startPos) || startPos < 0) {
                 startPos = 0;
+            }
+            
+            if (startPos >= currentDuration) {
+                statusText.innerText = `曲目已播放完毕`;
+                return;
             }
 
             const currentSourceNode = audioCtx.createBufferSource();
@@ -333,15 +347,23 @@
             currentSource = currentSourceNode;
             startPositionOffset = startPos;
 
-            const targetLocalTime = targetServerTime - timeOffset;
-            const targetAudioTime = audioCtx.currentTime + Math.max(0.1, (targetLocalTime - Date.now()) / 1000);
+            // 3. 计算最终起播时间
+            let targetAudioTime;
+            const remainingDelay = targetServerTime - (Date.now() + timeOffset);
+            
+            if (remainingDelay > 100) {
+                const targetLocalTime = targetServerTime - timeOffset;
+                targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
+            } else {
+                targetAudioTime = audioCtx.currentTime + 0.05;
+            }
             
             try {
                 currentSourceNode.start(targetAudioTime, startPos);
             } catch (e) {
                 console.error("Audio start 错误被拦截:", e);
                 try {
-                    currentSourceNode.start(targetAudioTime, 0);
+                    currentSourceNode.start(audioCtx.currentTime + 0.05, 0);
                 } catch (innerErr) {
                     statusText.innerText = "播放被浏览器拦截，请点击页面任意处";
                     statusText.style.background = "#fff3cd";
@@ -365,7 +387,7 @@
                 if (timeLeft <= 0) {
                     clearInterval(countdownTimer);
                     countdownTimer = null;
-                    statusText.innerText = `正在播放: ${filename}`;
+                    statusText.innerText = `正在播放: ${filename} (已自动追赶同步)`;
                 } else {
                     statusText.innerText = `同步预备中... ${(timeLeft / 1000).toFixed(2)} 秒后播放`;
                 }
