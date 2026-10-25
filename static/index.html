@@ -7,7 +7,7 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #eef2f5; margin-top: 30px; }
         .container { background: white; max-width: 520px; margin: 0 auto; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
         h2 { margin-top: 0; color: #333; }
-        #status { font-size: 14px; font-weight: bold; color: #007bff; background: #e9f3ff; padding: 10px; border-radius: 6px; }
+        #status { font-size: 14px; font-weight: bold; color: #007bff; background: #e9f3ff; padding: 10px; border-radius: 6px; cursor: pointer; }
         
         .upload-box { margin: 15px 0; padding: 12px; background: #f8f9fa; border: 2px dashed #cbd3da; border-radius: 6px; text-align: left; font-size: 13px; }
         .upload-box input { width: 100%; margin-top: 5px; }
@@ -33,7 +33,7 @@
 
 <div class="container">
     <h2>多设备零延迟精准同步控制台</h2>
-    <div id="status">正在连接服务器与初始化音频引擎...</div>
+    <div id="status" onclick="manualResumeAudio()">正在连接服务器与初始化音频引擎...（点击此处可手动激活声音）</div>
 
     <div class="upload-box">
         <label for="mp3File"><strong>上传新的 MP3 曲目：</strong></label>
@@ -87,7 +87,7 @@
     let isPlaying = false;    
 
     let timeOffset = 0; 
-    let ntpSamples = []; // 抗抖动 NTP 样本池
+    let ntpSamples = [];
     let mp3Files = [];
     let currentIndex = 0;
 
@@ -96,7 +96,23 @@
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
         if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
+            audioCtx.resume().then(() => {
+                statusText.innerText = "音频引擎已就绪，可正常同步播放";
+                statusText.style.color = "#007bff";
+                statusText.style.background = "#e9f3ff";
+            }).catch(err => {
+                console.error("AudioContext 恢复受阻:", err);
+                statusText.innerText = "⚠️ 浏览器拦截了声音，请点击页面任意处以解除静默";
+                statusText.style.color = "#856404";
+                statusText.style.background = "#fff3cd";
+            });
+        }
+    }
+
+    function manualResumeAudio() {
+        initAudioContext();
+        if (audioCtx && audioCtx.state === 'running') {
+            statusText.innerText = "✅ 音频上下文已激活";
         }
     }
 
@@ -161,7 +177,6 @@
             const serverTime = msg.t2 + (t3 - msg.t0) / 2;
             const currentOffset = serverTime - t3;
 
-            // RTT 小于 250ms 才采信，过滤公网瞬时毛刺
             if (rtt < 250) {
                 ntpSamples.push({ offset: currentOffset, rtt: rtt });
                 if (ntpSamples.length > 5) ntpSamples.shift();
@@ -209,17 +224,21 @@
             }
 
             if (!buffer || !buffer.duration) {
-                statusText.innerText = "音频解码未完成，请手动点击播放";
+                statusText.innerText = "音频解码未完成，请点击播放按钮";
                 return;
             }
 
             stopAudioNode();
             initAudioContext();
             
+            // 显式检查并恢复音频上下文状态
+            if (audioCtx && audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+
             currentDuration = buffer.duration;
             totalTimeText.innerText = formatTime(currentDuration);
 
-            // 严格边界保护，防止偏移量越界触发 RangeError 崩溃
             if (isNaN(startPos) || startPos < 0 || startPos >= currentDuration) {
                 startPos = 0;
             }
@@ -250,7 +269,9 @@
                 try {
                     currentSourceNode.start(targetAudioTime, 0);
                 } catch (innerErr) {
-                    statusText.innerText = "播放启动失败，请点击播放按钮";
+                    statusText.innerText = "播放被浏览器拦截，请点击页面任意处";
+                    statusText.style.background = "#fff3cd";
+                    statusText.style.color = "#856404";
                     return;
                 }
             }
@@ -432,9 +453,10 @@
         if (radios[currentIndex]) radios[currentIndex].checked = true;
     }
 
+    // 绑定全局点击事件，任意点击页面即可解除浏览器的 AudioContext 拦截
     document.body.addEventListener('click', () => {
         initAudioContext();
-    }, { once: true });
+    }, { once: false });
 </script>
 
 </body>
