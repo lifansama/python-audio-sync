@@ -78,13 +78,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     "t2": int(time.time() * 1000)
                 })
 
+            elif msg_type == "ping":
+                # 心跳响应，防止代理断开
+                await websocket.send_json({"type": "pong"})
+
             elif msg_type == "refresh_files":
                 await websocket.send_json({
                     "type": "audio_list",
                     "files": get_audio_files()
                 })
 
-            # 选歌广播（已加 try...except 与死连接清理）
             elif msg_type == "cmd:select":
                 filename = data.get("filename")
                 message = {
@@ -97,12 +100,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     except:
                         clients.discard(client)
 
-            # 播放广播（已加 try...except 与死连接清理）
             elif msg_type == "cmd:play":
                 filename = data.get("filename")
                 start_position = data.get("position", 0.0)
                 
-                delay = 5000  
+                # 公网环境适当留出 6 秒缓冲，确保所有设备有充足时间解码
+                delay = 6000  
                 target_time = int(time.time() * 1000) + delay
 
                 message = {
@@ -118,7 +121,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     except:
                         clients.discard(client)
 
-            # 暂停广播（已加 try...except 与死连接清理）
             elif msg_type == "cmd:pause":
                 message = {"type": "audio:pause"}
                 for client in list(clients):
@@ -127,7 +129,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     except:
                         clients.discard(client)
 
-            # 停止广播（已加 try...except 与死连接清理）
             elif msg_type == "cmd:stop":
                 message = {"type": "audio:stop"}
                 for client in list(clients):
