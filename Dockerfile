@@ -12,4 +12,4 @@ COPY . /app
 EXPOSE 8000
 
 # 修正：加上 --host 和 --port
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "uvloop", "--websocket-ping-interval", "20", "--websocket-ping-timeout", "30"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "uvloop", "--ws-ping-interval", "20", "--ws-ping-timeout", "30"]
