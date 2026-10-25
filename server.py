@@ -15,6 +15,14 @@ AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
 clients = set()
 
+# 💡 维护一个全局的播放状态机
+playback_state = {
+    "status": "stopped",       # "playing", "paused", "stopped"
+    "filename": None,
+    "target_time": 0,          # 计划开播的绝对时间戳 (ms)
+    "start_pos": 0.0           # 播放起始位置偏移量 (秒)
+}
+
 def get_audio_files():
     if not AUDIO_DIR.exists():
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,10 +68,37 @@ async def websocket_endpoint(websocket: WebSocket):
     print(f"客户端已连接: {websocket.client}")
 
     try:
+        # 1. 发送曲目列表
         await websocket.send_json({
             "type": "audio_list",
             "files": get_audio_files()
         })
+
+        # 2. 💡 核心新功能：如果当前有正在播放或暂停的音频，立即向新连接的设备同步状态
+        if playback_state["status"] == "playing":
+            now = int(time.time() * 1000)
+            current_pos = playback_state["start_pos"]
+            # 计算截至目前的精确播放进度
+            if now >= playback_state["target_time"]:
+                current_pos += (now - playback_state["target_time"]) / 1000.0
+            
+            # 给新加入的设备留出 4 秒缓冲时间进行预加载和解码
+            sync_target_time = now + 4000
+            await websocket.send_json({
+                "type": "audio:schedule_play",
+                "targetTime": sync_target_time,
+                "audioUrl": f"/static/audio/{playback_state['filename']}",
+                "filename": playback_state["filename"],
+                "position": current_pos
+            })
+        elif playback_state["status"] == "paused":
+            await websocket.send_json({
+                "type": "audio:select",
+                "filename": playback_state["filename"]
+            })
+            await websocket.send_json({
+                "type": "audio:pause"
+            })
 
         while True:
             data = await websocket.receive_json()
@@ -79,7 +114,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
             elif msg_type == "ping":
-                # 心跳响应，防止代理断开
                 await websocket.send_json({"type": "pong"})
 
             elif msg_type == "refresh_files":
@@ -90,6 +124,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif msg_type == "cmd:select":
                 filename = data.get("filename")
+                playback_state["filename"] = filename
+                playback_state["start_pos"] = 0.0
+                
                 message = {
                     "type": "audio:select",
                     "filename": filename
@@ -104,9 +141,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 filename = data.get("filename")
                 start_position = data.get("position", 0.0)
                 
-                # 公网环境适当留出 6 秒缓冲，确保所有设备有充足时间解码
-                delay = 6000  
+                delay = 6000  # 公网环境 6 秒缓冲
                 target_time = int(time.time() * 1000) + delay
+
+                # 更新全局播放状态
+                playback_state["status"] = "playing"
+                playback_state["filename"] = filename
+                playback_state["target_time"] = target_time
+                playback_state["start_pos"] = start_position
 
                 message = {
                     "type": "audio:schedule_play",
@@ -122,6 +164,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         clients.discard(client)
 
             elif msg_type == "cmd:pause":
+                # 更新状态并结算当前已播放的进度
+                if playback_state["status"] == "playing":
+                    now = int(time.time() * 1000)
+                    if now >= playback_state["target_time"]:
+                        playback_state["start_pos"] += (now - playback_state["target_time"]) / 1000.0
+                playback_state["status"] = "paused"
+
                 message = {"type": "audio:pause"}
                 for client in list(clients):
                     try:
@@ -130,6 +179,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         clients.discard(client)
 
             elif msg_type == "cmd:stop":
+                playback_state["status"] = "stopped"
+                playback_state["filename"] = None
+                playback_state["start_pos"] = 0.0
+
                 message = {"type": "audio:stop"}
                 for client in list(clients):
                     try:
