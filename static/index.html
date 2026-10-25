@@ -87,7 +87,7 @@
     let isPlaying = false;    
 
     let timeOffset = 0; 
-    let ntpSamples = []; // 👈 用于存放最近的 NTP 样本，抗公网抖动
+    let ntpSamples = [];
     let mp3Files = [];
     let currentIndex = 0;
 
@@ -144,9 +144,7 @@
 
     ws.onopen = () => {
         syncNtp();
-        // 每 10 秒进行一次 NTP 校准
         setInterval(() => syncNtp(), 10000);
-        // 每 20 秒发送一次心跳保活
         setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ping' }));
@@ -163,20 +161,15 @@
             const serverTime = msg.t2 + (t3 - msg.t0) / 2;
             const currentOffset = serverTime - t3;
 
-            // 💡 核心优化：抗抖动过滤。只采信 RTT 小于 250ms 的正常样本，过滤公网瞬时毛刺
             if (rtt < 250) {
                 ntpSamples.push({ offset: currentOffset, rtt: rtt });
-                if (ntpSamples.length > 5) ntpSamples.shift(); // 保留最近 5 个样本
-
-                // 按 RTT 升序排列，取网络环境最好（RTT最小）的一次计算结果作为基准
+                if (ntpSamples.length > 5) ntpSamples.shift();
                 ntpSamples.sort((a, b) => a.rtt - b.rtt);
                 timeOffset = ntpSamples[0].offset;
             }
         }
 
-        else if (msg.type === 'pong') {
-            // 心跳响应忽略
-        }
+        else if (msg.type === 'pong') {}
 
         else if (msg.type === 'audio_list') {
             mp3Files = msg.files;
@@ -200,7 +193,7 @@
         else if (msg.type === 'audio:schedule_play') {
             const filename = msg.filename;
             const targetServerTime = msg.targetTime;
-            const startPos = msg.position || 0;
+            let startPos = msg.position || 0;
 
             const index = mp3Files.indexOf(filename);
             if (index !== -1) {
@@ -220,6 +213,11 @@
             currentDuration = buffer.duration;
             totalTimeText.innerText = formatTime(currentDuration);
 
+            // 💡 核心修复：如果传入的起始位置已经超过或等于音频总时长，直接归零或截断，防止报错
+            if (startPos >= currentDuration) {
+                startPos = 0;
+            }
+
             const currentSourceNode = audioCtx.createBufferSource();
             currentSourceNode.buffer = buffer;
             currentSourceNode.connect(audioCtx.destination);
@@ -238,7 +236,14 @@
 
             const targetLocalTime = targetServerTime - timeOffset;
             const targetAudioTime = audioCtx.currentTime + Math.max(0.1, (targetLocalTime - Date.now()) / 1000);
-            currentSourceNode.start(targetAudioTime, startPos);
+            
+            try {
+                currentSourceNode.start(targetAudioTime, startPos);
+            } catch (e) {
+                console.error("Audio start 错误:", e);
+                statusText.innerText = "播放启动失败，请重试";
+                return;
+            }
 
             playbackStartedAt = targetAudioTime;
             startProgressLoop();
