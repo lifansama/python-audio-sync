@@ -7,7 +7,7 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #eef2f5; margin-top: 30px; }
         .container { background: white; max-width: 520px; margin: 0 auto; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
         h2 { margin-top: 0; color: #333; }
-        #status { font-size: 14px; font-weight: bold; color: #007bff; background: #e9f3ff; padding: 10px; border-radius: 6px; cursor: pointer; }
+        #status { font-size: 14px; font-weight: bold; color: #007bff; background: #e9f3ff; padding: 10px; border-radius: 6px; cursor: pointer; transition: 0.3s; }
         
         .upload-box { margin: 15px 0; padding: 12px; background: #f8f9fa; border: 2px dashed #cbd3da; border-radius: 6px; text-align: left; font-size: 13px; }
         .upload-box input { width: 100%; margin-top: 5px; }
@@ -177,6 +177,8 @@
         initAudioContext();
         if (audioCtx && audioCtx.state === 'running' && !isPlaying) {
             statusText.innerText = "✅ 音频上下文已激活";
+            statusText.style.color = "#007bff";
+            statusText.style.background = "#e9f3ff";
         }
         updateAudioStateUI();
     }
@@ -189,6 +191,8 @@
 
         try {
             statusText.innerText = `正在后台预加载: ${filename}...`;
+            statusText.style.color = "#007bff";
+            statusText.style.background = "#e9f3ff";
             const response = await fetch(`/static/audio/${filename}`);
             const arrayBuffer = await response.arrayBuffer();
             const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
@@ -197,6 +201,8 @@
             return decodedBuffer;
         } catch (e) {
             statusText.innerText = `⚠️ 音频加载异常（可能网络波动）`;
+            statusText.style.color = "#856404";
+            statusText.style.background = "#fff3cd";
             console.error(e);
         }
     }
@@ -217,8 +223,15 @@
             wsStatusElem.innerText = "已连接 (Online)";
             wsStatusElem.className = "badge-online";
             
-            if (!isPlaying) {
+            // 💡 网络恢复且连接成功后：根据当前播放状态自动重置顶部提示栏颜色与文案
+            if (isPlaying) {
+                statusText.innerText = "✅ 网络已恢复，正通过本地缓存安全播放中";
+                statusText.style.color = "#28a745";
+                statusText.style.background = "#e8f5e9";
+            } else {
                 statusText.innerText = "服务器已连接，随时准备接收考试指令";
+                statusText.style.color = "#007bff";
+                statusText.style.background = "#e9f3ff";
             }
             
             syncNtp();
@@ -237,13 +250,14 @@
             wsStatusElem.innerText = "已断开连接 (点击重连)";
             wsStatusElem.className = "badge-offline";
             
-            // 💡 核心容灾策略：断网时绝不中断当前播放，给予离线保护提示
             if (isPlaying) {
                 statusText.innerText = "⚠️ 网络闪断，正依靠本地音频安全播放中（考试不受影响）";
                 statusText.style.color = "#856404";
                 statusText.style.background = "#fff3cd";
             } else {
                 statusText.innerText = "⚠️ 与服务器断开连接，请点击下方状态栏重新连接";
+                statusText.style.color = "#856404";
+                statusText.style.background = "#fff3cd";
             }
         };
 
@@ -287,7 +301,7 @@
             }
 
             else if (msg.type === 'audio:select') {
-                if (isPlaying) return; // 正在播放中忽略选择切换
+                if (isPlaying) return;
                 const filename = msg.filename;
                 const index = mp3Files.indexOf(filename);
                 if (index !== -1) {
@@ -299,7 +313,6 @@
             }
 
             else if (msg.type === 'audio:schedule_play') {
-                // 💡 宽容策略：如果当前设备正在本地安稳播放中，重连后忽略服务端的重播/重对齐指令，防止打断
                 if (isPlaying && currentSource) {
                     console.log("当前正在本地离线安全播放，已忽略重连同步指令");
                     return;
@@ -316,6 +329,8 @@
                 }
 
                 statusText.innerText = `正在准备考场音频缓存...`;
+                statusText.style.color = "#007bff";
+                statusText.style.background = "#e9f3ff";
                 
                 let buffer = audioBuffers[filename];
                 if (!buffer) {
@@ -424,6 +439,8 @@
                 isPlaying = false;
                 playPauseBtn.innerText = "▶ 播放";
                 statusText.innerText = `已暂停 (进度: ${formatTime(pauseOffset)})`;
+                statusText.style.color = "#007bff";
+                statusText.style.background = "#e9f3ff";
             }
 
             else if (msg.type === 'audio:stop') {
@@ -442,7 +459,6 @@
         };
     }
 
-    // 初始化自动发起首次连接
     connectWs();
 
     function stopAudioNode() {
