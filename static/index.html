@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>多设备零延迟精准同步控制台</title>
+    <title>Play Together</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #eef2f5; margin-top: 30px; }
         .container { background: white; max-width: 520px; margin: 0 auto; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
@@ -32,11 +32,11 @@
 <body>
 
 <div class="container">
-    <h2>多设备零延迟精准同步控制台</h2>
+    <h2>Play Together</h2>
     <div id="status">正在连接服务器与初始化音频引擎...</div>
 
     <div class="upload-box">
-        <label for="mp3File"><strong>上传新的 MP3 曲目：</strong></label>
+        <label for="mp3File"><strong>上传新的 MP3 文件：</strong></label>
         <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
     </div>
 
@@ -51,12 +51,12 @@
     </div>
 
     <div style="text-align: right; margin-top: 5px;">
-        <button onclick="refreshFileList()" class="btn-secondary" style="font-size: 12px; padding: 4px 8px;">刷新曲目列表</button>
+        <button onclick="refreshFileList()" class="btn-secondary" style="font-size: 12px; padding: 4px 8px;">刷新播放列表</button>
     </div>
 
-    <!-- 曲目列表容器（带默认提示，防止刚打开时空白） -->
+    <!-- 播放列表容器（带默认提示，防止刚打开时空白） -->
     <div class="file-list" id="playlist">
-        <p style="color:#888; text-align:center;">正在加载曲目列表...</p>
+        <p style="color:#888; text-align:center;">正在加载播放列表...</p>
     </div>
 
     <div class="controls">
@@ -337,7 +337,7 @@
     function playSelected() {
         if (mp3Files.length === 0) return alert("audio 文件夹下没有 mp3 文件！");
         const selectedRadio = document.querySelector('input[name="audioFile"]:checked');
-        if (!selectedRadio) return alert("请先选择要播放的曲目！");
+        if (!selectedRadio) return alert("请先选择要播放的文件！");
 
         const filename = selectedRadio.value;
         ws.send(JSON.stringify({
