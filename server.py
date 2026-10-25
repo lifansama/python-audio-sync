@@ -1,12 +1,22 @@
 import os
 import time
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import uvicorn
 
 app = FastAPI()
+
+# 💡 自动注入响应头中间件，彻底解决浏览器 CSP 策略对 connect-src 和媒体资源的拦截
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https: http:; "
+        "connect-src 'self' ws: wss: https: http:;"
+    )
+    return response
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -74,14 +84,14 @@ async def websocket_endpoint(websocket: WebSocket):
             "files": get_audio_files()
         })
 
-        # 2. 如果当前有正在播放的曲目，向新连接的设备同步状态
+        # 2. 核心新功能：如果当前有正在播放的曲目，向新连接的设备同步状态并自动追赶
         if playback_state["status"] == "playing" and playback_state["filename"]:
             now = int(time.time() * 1000)
             current_pos = playback_state["start_pos"]
             if now >= playback_state["target_time"]:
                 current_pos += (now - playback_state["target_time"]) / 1000.0
             
-            sync_target_time = now + 4000
+            sync_target_time = now + 4000  # 留出 4 秒缓冲进行加载和预备
             await websocket.send_json({
                 "type": "audio:schedule_play",
                 "targetTime": sync_target_time,
@@ -112,6 +122,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
             elif msg_type == "ping":
+                # 心跳保持连接，防止反向代理超时切断
                 await websocket.send_json({"type": "pong"})
 
             elif msg_type == "refresh_files":
