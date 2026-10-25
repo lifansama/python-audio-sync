@@ -181,6 +181,25 @@
 
     setInterval(updateAudioStateUI, 1000);
 
+    // 💡 补回缺失的预加载与解码函数
+    async function preloadAndDecode(filename) {
+        initAudioContext();
+        if (audioBuffers[filename]) return audioBuffers[filename];
+
+        try {
+            statusText.innerText = `正在后台预加载: ${filename}...`;
+            const response = await fetch(`/static/audio/${filename}`);
+            const arrayBuffer = await response.arrayBuffer();
+            const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            audioBuffers[filename] = decodedBuffer;
+            statusText.innerText = `就绪: ${filename}`;
+            return decodedBuffer;
+        } catch (e) {
+            statusText.innerText = `加载音频失败: ${filename}`;
+            console.error(e);
+        }
+    }
+
     // WebSocket 独立连接与重连管理函数
     function connectWs() {
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
