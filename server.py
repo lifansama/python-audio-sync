@@ -212,4 +212,4 @@ async def websocket_endpoint(websocket: WebSocket):
         await broadcast_client_count()
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, loop="uvloop")
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, loop="uvloop", websocket_ping_interval=20, websocket_ping_timeout=30)
