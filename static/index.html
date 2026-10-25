@@ -210,11 +210,6 @@
             stopAudioNode();
             initAudioContext();
             
-            // 💡 关键：在播放前再次显式唤醒 AudioContext，防止浏览器因没有直接点击而挂起它
-            if (audioCtx && audioCtx.state === 'suspended') {
-                await audioCtx.resume();
-            }
-
             currentDuration = buffer.duration;
             totalTimeText.innerText = formatTime(currentDuration);
 
@@ -245,7 +240,7 @@
                 currentSourceNode.start(targetAudioTime, startPos);
             } catch (e) {
                 console.error("Audio start 错误:", e);
-                statusText.innerText = "播放被浏览器拦截，请点击页面任意处";
+                statusText.innerText = "播放启动失败";
                 return;
             }
 
@@ -412,13 +407,6 @@
         pauseOffset = 0;
         const filename = mp3Files[currentIndex];
         broadcastSelection(filename);
-    }
-
-    function broadcastSelection(filename) {
-        ws.send(JSON.stringify({
-            type: 'cmd:select',
-            filename: filename
-        }));
     }
 
     function updateRadioSelection() {
