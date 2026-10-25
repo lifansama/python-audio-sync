@@ -87,7 +87,7 @@
     let isPlaying = false;    
 
     let timeOffset = 0; 
-    let ntpSamples = [];
+    let ntpSamples = []; // 抗抖动 NTP 样本池
     let mp3Files = [];
     let currentIndex = 0;
 
@@ -161,6 +161,7 @@
             const serverTime = msg.t2 + (t3 - msg.t0) / 2;
             const currentOffset = serverTime - t3;
 
+            // RTT 小于 250ms 才采信，过滤公网瞬时毛刺
             if (rtt < 250) {
                 ntpSamples.push({ offset: currentOffset, rtt: rtt });
                 if (ntpSamples.length > 5) ntpSamples.shift();
@@ -207,13 +208,19 @@
                 buffer = await preloadAndDecode(filename);
             }
 
+            if (!buffer || !buffer.duration) {
+                statusText.innerText = "音频解码未完成，请手动点击播放";
+                return;
+            }
+
             stopAudioNode();
             initAudioContext();
             
             currentDuration = buffer.duration;
             totalTimeText.innerText = formatTime(currentDuration);
 
-            if (startPos >= currentDuration) {
+            // 严格边界保护，防止偏移量越界触发 RangeError 崩溃
+            if (isNaN(startPos) || startPos < 0 || startPos >= currentDuration) {
                 startPos = 0;
             }
 
@@ -239,9 +246,13 @@
             try {
                 currentSourceNode.start(targetAudioTime, startPos);
             } catch (e) {
-                console.error("Audio start 错误:", e);
-                statusText.innerText = "播放启动失败";
-                return;
+                console.error("Audio start 错误被拦截:", e);
+                try {
+                    currentSourceNode.start(targetAudioTime, 0);
+                } catch (innerErr) {
+                    statusText.innerText = "播放启动失败，请点击播放按钮";
+                    return;
+                }
             }
 
             playbackStartedAt = targetAudioTime;
@@ -407,6 +418,13 @@
         pauseOffset = 0;
         const filename = mp3Files[currentIndex];
         broadcastSelection(filename);
+    }
+
+    function broadcastSelection(filename) {
+        ws.send(JSON.stringify({
+            type: 'cmd:select',
+            filename: filename
+        }));
     }
 
     function updateRadioSelection() {
