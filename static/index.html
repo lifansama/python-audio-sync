@@ -27,6 +27,12 @@
         .controls button.btn-secondary { background: #6c757d; }
         .controls button.btn-danger { background: #dc3545; }
         .controls button.btn-warning { background: #ffc107; color: #212529; }
+
+        /* 底部监控面板样式 */
+        .monitor-panel { margin-top: 20px; padding: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; font-size: 12px; text-align: left; color: #495057; }
+        .monitor-item { display: flex; justify-content: space-between; margin: 4px 0; }
+        .badge-online { color: #28a745; font-weight: bold; }
+        .badge-offline { color: #dc3545; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -62,6 +68,22 @@
         <button id="playPauseBtn" onclick="togglePlayPause()" class="btn-warning">▶ 播放</button>
         <button onclick="actionWithSync(() => stop())" class="btn-danger">停止</button>
     </div>
+
+    <!-- 底部 NTP 与网络状态监控面板 -->
+    <div class="monitor-panel">
+        <div class="monitor-item">
+            <span>WebSocket 连接状态：</span>
+            <span id="wsStatus" class="badge-offline">未连接</span>
+        </div>
+        <div class="monitor-item">
+            <span>NTP 时钟偏移 (Time Offset)：</span>
+            <span id="ntpOffsetVal">0 ms</span>
+        </div>
+        <div class="monitor-item">
+            <span>网络往返延迟 (RTT)：</span>
+            <span id="ntpRttVal">-- ms</span>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -74,6 +96,11 @@
     const currentTimeText = document.getElementById('currentTime');
     const totalTimeText = document.getElementById('totalTime');
     const playPauseBtn = document.getElementById('playPauseBtn');
+    
+    // 监控面板 DOM 元素
+    const wsStatusElem = document.getElementById('wsStatus');
+    const ntpOffsetValElem = document.getElementById('ntpOffsetVal');
+    const ntpRttValElem = document.getElementById('ntpRttVal');
 
     let audioCtx = null;
     let audioBuffers = {}; 
@@ -159,6 +186,9 @@
     }
 
     ws.onopen = () => {
+        wsStatusElem.innerText = "已连接 (Online)";
+        wsStatusElem.className = "badge-online";
+        
         syncNtp();
         setInterval(() => syncNtp(), 10000);
         setInterval(() => {
@@ -166,6 +196,16 @@
                 ws.send(JSON.stringify({ type: 'ping' }));
             }
         }, 20000);
+    };
+
+    ws.onclose = () => {
+        wsStatusElem.innerText = "已断开连接";
+        wsStatusElem.className = "badge-offline";
+    };
+
+    ws.onerror = () => {
+        wsStatusElem.innerText = "连接异常";
+        wsStatusElem.className = "badge-offline";
     };
 
     ws.onmessage = async (event) => {
@@ -182,6 +222,10 @@
                 if (ntpSamples.length > 5) ntpSamples.shift();
                 ntpSamples.sort((a, b) => a.rtt - b.rtt);
                 timeOffset = ntpSamples[0].offset;
+
+                // 更新底部监控面板数值显示
+                ntpOffsetValElem.innerText = `${Math.round(timeOffset)} ms`;
+                ntpRttValElem.innerText = `${rtt} ms`;
             }
         }
 
@@ -231,7 +275,6 @@
             stopAudioNode();
             initAudioContext();
             
-            // 显式检查并恢复音频上下文状态
             if (audioCtx && audioCtx.state === 'suspended') {
                 await audioCtx.resume();
             }
@@ -453,7 +496,6 @@
         if (radios[currentIndex]) radios[currentIndex].checked = true;
     }
 
-    // 绑定全局点击事件，任意点击页面即可解除浏览器的 AudioContext 拦截
     document.body.addEventListener('click', () => {
         initAudioContext();
     }, { once: false });
