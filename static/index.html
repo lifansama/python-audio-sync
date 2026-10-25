@@ -30,9 +30,14 @@
 
         /* 底部监控面板样式 */
         .monitor-panel { margin-top: 20px; padding: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; font-size: 12px; text-align: left; color: #495057; }
-        .monitor-item { display: flex; justify-content: space-between; margin: 4px 0; }
+        .monitor-item { display: flex; justify-content: space-between; margin: 4px 0; align-items: center; }
         .badge-online { color: #28a745; font-weight: bold; }
         .badge-offline { color: #dc3545; font-weight: bold; }
+        
+        /* 动态音频状态徽章 */
+        .audio-badge-active { color: #28a745; font-weight: bold; cursor: pointer; }
+        .audio-badge-inactive { color: #dc3545; font-weight: bold; cursor: pointer; background: #fff3cd; padding: 2px 6px; border-radius: 4px; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -69,11 +74,15 @@
         <button onclick="actionWithSync(() => stop())" class="btn-danger">停止</button>
     </div>
 
-    <!-- 底部 NTP 与网络状态监控面板 -->
+    <!-- 底部 NTP 与网络/音频状态监控面板 -->
     <div class="monitor-panel">
         <div class="monitor-item">
             <span>WebSocket 连接状态：</span>
             <span id="wsStatus" class="badge-offline">未连接</span>
+        </div>
+        <div class="monitor-item">
+            <span>音频引擎状态：</span>
+            <span id="audioStateVal" class="audio-badge-inactive" onclick="manualResumeAudio()">请点击这里激活音频状态</span>
         </div>
         <div class="monitor-item">
             <span>NTP 时钟偏移 (Time Offset)：</span>
@@ -99,6 +108,7 @@
     
     // 监控面板 DOM 元素
     const wsStatusElem = document.getElementById('wsStatus');
+    const audioStateValElem = document.getElementById('audioStateVal');
     const ntpOffsetValElem = document.getElementById('ntpOffsetVal');
     const ntpRttValElem = document.getElementById('ntpRttVal');
 
@@ -118,6 +128,21 @@
     let mp3Files = [];
     let currentIndex = 0;
 
+    function updateAudioStateUI() {
+        if (!audioCtx) {
+            audioStateValElem.className = "audio-badge-inactive";
+            audioStateValElem.innerText = "请点击这里激活音频状态";
+            return;
+        }
+        if (audioCtx.state === 'running') {
+            audioStateValElem.className = "audio-badge-active";
+            audioStateValElem.innerText = "音频已激活";
+        } else {
+            audioStateValElem.className = "audio-badge-inactive";
+            audioStateValElem.innerText = "请点击这里激活音频状态";
+        }
+    }
+
     function initAudioContext() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -127,13 +152,16 @@
                 statusText.innerText = "音频引擎已就绪，可正常同步播放";
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
+                updateAudioStateUI();
             }).catch(err => {
                 console.error("AudioContext 恢复受阻:", err);
                 statusText.innerText = "⚠️ 浏览器拦截了声音，请点击页面任意处以解除静默";
                 statusText.style.color = "#856404";
                 statusText.style.background = "#fff3cd";
+                updateAudioStateUI();
             });
         }
+        updateAudioStateUI();
     }
 
     function manualResumeAudio() {
@@ -141,7 +169,11 @@
         if (audioCtx && audioCtx.state === 'running') {
             statusText.innerText = "✅ 音频上下文已激活";
         }
+        updateAudioStateUI();
     }
+
+    // 定期检测音频状态，确保 UI 实时同步
+    setInterval(updateAudioStateUI, 1000);
 
     async function uploadAudioFile() {
         const fileInput = document.getElementById('mp3File');
@@ -223,7 +255,6 @@
                 ntpSamples.sort((a, b) => a.rtt - b.rtt);
                 timeOffset = ntpSamples[0].offset;
 
-                // 更新底部监控面板数值显示
                 ntpOffsetValElem.innerText = `${Math.round(timeOffset)} ms`;
                 ntpRttValElem.innerText = `${rtt} ms`;
             }
