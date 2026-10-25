@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>多设备零延迟精准同步控制台</title>
+    <title>UniSound - 多设备零延迟精准同步控制台</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #eef2f5; margin-top: 30px; }
         .container { background: white; max-width: 520px; margin: 0 auto; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
@@ -30,20 +30,21 @@
 
         /* 底部监控面板样式 */
         .monitor-panel { margin-top: 20px; padding: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; font-size: 12px; text-align: left; color: #495057; }
-        .monitor-item { display: flex; justify-content: space-between; margin: 4px 0; align-items: center; }
-        .badge-online { color: #28a745; font-weight: bold; }
-        .badge-offline { color: #dc3545; font-weight: bold; }
+        .monitor-item { display: flex; justify-content: space-between; margin: 6px 0; align-items: center; }
         
-        /* 动态音频状态徽章 */
+        /* 动态连接与音频状态徽章 */
+        .badge-online { color: #28a745; font-weight: bold; }
+        .badge-offline { color: #dc3545; font-weight: bold; cursor: pointer; background: #f8d7da; padding: 2px 6px; border-radius: 4px; animation: pulse 1.5s infinite; }
         .audio-badge-active { color: #28a745; font-weight: bold; cursor: pointer; }
-        .audio-badge-inactive { color: #dc3545; font-weight: bold; cursor: pointer; background: #fff3cd; padding: 2px 6px; border-radius: 4px; animation: pulse 1.5s infinite; }
+        .audio-badge-inactive { color: #856404; font-weight: bold; cursor: pointer; background: #fff3cd; padding: 2px 6px; border-radius: 4px; animation: pulse 1.5s infinite; }
+        
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>多设备零延迟精准同步控制台</h2>
+    <h2>UniSound - 考场同步听力广播系统</h2>
     <div id="status" onclick="manualResumeAudio()">正在连接服务器与初始化音频引擎...（点击此处可手动激活声音）</div>
 
     <div class="progress-container">
@@ -75,11 +76,15 @@
         <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
     </div>
 
-    <!-- 底部 NTP 与网络/音频状态监控面板 -->
+    <!-- 底部状态与监控面板 -->
     <div class="monitor-panel">
         <div class="monitor-item">
+            <span>在线连接设备数：</span>
+            <span id="clientCountVal" style="font-weight: bold; color: #007bff;">1 台</span>
+        </div>
+        <div class="monitor-item">
             <span>WebSocket 连接状态：</span>
-            <span id="wsStatus" class="badge-offline">未连接</span>
+            <span id="wsStatus" class="badge-offline" onclick="connectWs()">点击尝试重新连接</span>
         </div>
         <div class="monitor-item">
             <span>音频引擎状态：</span>
@@ -97,9 +102,7 @@
 </div>
 
 <script>
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    
+    let ws = null;
     const statusText = document.getElementById('status');
     const playlistContainer = document.getElementById('playlist');
     const progressBarFill = document.getElementById('progressBarFill');
@@ -109,6 +112,7 @@
     
     // 监控面板 DOM 元素
     const wsStatusElem = document.getElementById('wsStatus');
+    const clientCountElem = document.getElementById('clientCountVal');
     const audioStateValElem = document.getElementById('audioStateVal');
     const ntpOffsetValElem = document.getElementById('ntpOffsetVal');
     const ntpRttValElem = document.getElementById('ntpRttVal');
@@ -128,6 +132,8 @@
     let ntpSamples = [];
     let mp3Files = [];
     let currentIndex = 0;
+    let ntpInterval = null;
+    let pingInterval = null;
 
     function updateAudioStateUI() {
         if (!audioCtx) {
@@ -175,246 +181,226 @@
 
     setInterval(updateAudioStateUI, 1000);
 
-    async function uploadAudioFile() {
-        const fileInput = document.getElementById('mp3File');
-        if (fileInput.files.length === 0) return;
-
-        const file = fileInput.files[0];
-        const formData = new FormData();
-        formData.append("file", file);
-
-        statusText.innerText = `正在上传 ${file.name}...`;
-        try {
-            const response = await fetch('/upload', { method: 'POST', body: formData });
-            const result = await response.json();
-            if (result.success) {
-                statusText.innerText = `上传成功: ${result.filename}`;
-                fileInput.value = '';
-            } else {
-                statusText.innerText = `上传失败: ${result.message}`;
-            }
-        } catch (e) {
-            statusText.innerText = `上传出错`;
-            console.error(e);
+    // WebSocket 独立连接与重连管理函数
+    function connectWs() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+            return;
         }
-    }
 
-    async function preloadAndDecode(filename) {
-        initAudioContext();
-        if (audioBuffers[filename]) return audioBuffers[filename];
-
-        try {
-            statusText.innerText = `正在后台预加载: ${filename}...`;
-            const response = await fetch(`/static/audio/${filename}`);
-            const arrayBuffer = await response.arrayBuffer();
-            const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            audioBuffers[filename] = decodedBuffer;
-            statusText.innerText = `就绪: ${filename}`;
-            return decodedBuffer;
-        } catch (e) {
-            statusText.innerText = `加载音频失败: ${filename}`;
-            console.error(e);
-        }
-    }
-
-    ws.onopen = () => {
-        wsStatusElem.innerText = "已连接 (Online)";
-        wsStatusElem.className = "badge-online";
-        
-        syncNtp();
-        setInterval(() => syncNtp(), 10000);
-        setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'ping' }));
-            }
-        }, 20000);
-    };
-
-    ws.onclose = () => {
-        wsStatusElem.innerText = "已断开连接";
+        wsStatusElem.innerText = "正在连接服务器...";
         wsStatusElem.className = "badge-offline";
-    };
 
-    ws.onerror = () => {
-        wsStatusElem.innerText = "连接异常";
-        wsStatusElem.className = "badge-offline";
-    };
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
-    ws.onmessage = async (event) => {
-        const msg = JSON.parse(event.data);
-
-        if (msg.type === 'ntp:sync:reply') {
-            const t3 = Date.now();
-            const rtt = (t3 - msg.t0) - (msg.t2 - msg.t1);
-            const serverTime = msg.t2 + (t3 - msg.t0) / 2;
-            const currentOffset = serverTime - t3;
-
-            if (rtt < 250) {
-                ntpSamples.push({ offset: currentOffset, rtt: rtt });
-                if (ntpSamples.length > 5) ntpSamples.shift();
-                ntpSamples.sort((a, b) => a.rtt - b.rtt);
-                timeOffset = ntpSamples[0].offset;
-
-                ntpOffsetValElem.innerText = `${Math.round(timeOffset)} ms`;
-                ntpRttValElem.innerText = `${rtt} ms`;
-            }
-        }
-
-        else if (msg.type === 'pong') {}
-
-        else if (msg.type === 'audio_list') {
-            mp3Files = msg.files;
-            renderPlaylist();
-            if (mp3Files.length > 0 && !audioBuffers[mp3Files[currentIndex]]) {
-                await preloadAndDecode(mp3Files[currentIndex]);
-            }
-        }
-
-        else if (msg.type === 'audio:select') {
-            const filename = msg.filename;
-            const index = mp3Files.indexOf(filename);
-            if (index !== -1) {
-                currentIndex = index;
-                pauseOffset = 0;
-                updateRadioSelection();
-                await preloadAndDecode(filename);
-            }
-        }
-
-        else if (msg.type === 'audio:schedule_play') {
-            const filename = msg.filename;
-            const targetServerTime = msg.targetTime;
-            let basePosition = msg.position || 0;
-
-            const index = mp3Files.indexOf(filename);
-            if (index !== -1) {
-                currentIndex = index;
-                updateRadioSelection();
-            }
-
-            statusText.innerText = `正在准备考场音频缓存...`;
+        ws.onopen = () => {
+            wsStatusElem.innerText = "已连接 (Online)";
+            wsStatusElem.className = "badge-online";
+            statusText.innerText = "服务器已连接，随时准备接收考试指令";
             
-            // 1. 确保音频优先加载和解码完成
-            let buffer = audioBuffers[filename];
-            if (!buffer) {
-                buffer = await preloadAndDecode(filename);
-            }
+            syncNtp();
+            if (ntpInterval) clearInterval(ntpInterval);
+            if (pingInterval) clearInterval(pingInterval);
 
-            if (!buffer || !buffer.duration) {
-                statusText.innerText = "音频解码未完成，请点击播放按钮";
-                return;
-            }
-
-            stopAudioNode();
-            initAudioContext();
-            
-            if (audioCtx && audioCtx.state === 'suspended') {
-                await audioCtx.resume();
-            }
-
-            currentDuration = buffer.duration;
-            totalTimeText.innerText = formatTime(currentDuration);
-
-            // 2. 绝对对齐与实时追赶核心算法
-            const nowServer = Date.now() + timeOffset;
-            let startPos = basePosition;
-            
-            if (nowServer >= targetServerTime) {
-                const elapsedServerSeconds = (nowServer - targetServerTime) / 1000;
-                startPos = basePosition + elapsedServerSeconds;
-            }
-
-            if (isNaN(startPos) || startPos < 0) startPos = 0;
-            if (startPos >= currentDuration) {
-                statusText.innerText = `曲目已播放完毕`;
-                return;
-            }
-
-            const currentSourceNode = audioCtx.createBufferSource();
-            currentSourceNode.buffer = buffer;
-            currentSourceNode.connect(audioCtx.destination);
-            
-            currentSourceNode.onended = () => {
-                if (currentSource === currentSourceNode) {
-                    currentSource = null;
-                    stopProgressLoop();
-                    isPlaying = false;
-                    playPauseBtn.innerText = "▶ 播放";
+            ntpInterval = setInterval(() => syncNtp(), 10000);
+            pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ping' }));
                 }
-            };
+            }, 20000);
+        };
 
-            currentSource = currentSourceNode;
-            startPositionOffset = startPos;
+        ws.onclose = () => {
+            wsStatusElem.innerText = "已断开连接 (点击重连)";
+            wsStatusElem.className = "badge-offline";
+            statusText.innerText = "⚠️ 与服务器断开连接，请点击下方状态栏重新连接";
+        };
 
-            // 3. 极速起播：时间富余则对齐，时间已过则 0.05 秒内立刻切入
-            let targetAudioTime;
-            const timeLeft = targetServerTime - nowServer;
+        ws.onerror = () => {
+            wsStatusElem.innerText = "连接异常 (点击重试)";
+            wsStatusElem.className = "badge-offline";
+        };
 
-            if (timeLeft > 200) {
-                const targetLocalTime = targetServerTime - timeOffset;
-                targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
-            } else {
-                targetAudioTime = audioCtx.currentTime + 0.05;
-            }
-            
-            try {
-                currentSourceNode.start(targetAudioTime, startPos);
-            } catch (e) {
-                console.error("Audio start 错误被拦截:", e);
-                currentSourceNode.start(audioCtx.currentTime + 0.05, 0);
+        ws.onmessage = async (event) => {
+            const msg = JSON.parse(event.data);
+
+            if (msg.type === 'client_count') {
+                clientCountElem.innerText = `${msg.count} 台`;
             }
 
-            playbackStartedAt = targetAudioTime;
-            startProgressLoop();
-            
-            isPlaying = true;
-            playPauseBtn.innerText = "⏸ 暂停";
+            else if (msg.type === 'ntp:sync:reply') {
+                const t3 = Date.now();
+                const rtt = (t3 - msg.t0) - (msg.t2 - msg.t1);
+                const serverTime = msg.t2 + (t3 - msg.t0) / 2;
+                const currentOffset = serverTime - t3;
 
-            if (countdownTimer) clearInterval(countdownTimer);
+                if (rtt < 250) {
+                    ntpSamples.push({ offset: currentOffset, rtt: rtt });
+                    if (ntpSamples.length > 5) ntpSamples.shift();
+                    ntpSamples.sort((a, b) => a.rtt - b.rtt);
+                    timeOffset = ntpSamples[0].offset;
 
-            if (timeLeft > 200) {
-                countdownTimer = setInterval(() => {
-                    const currentNowServer = Date.now() + timeOffset;
-                    const remaining = targetServerTime - currentNowServer;
+                    ntpOffsetValElem.innerText = `${Math.round(timeOffset)} ms`;
+                    ntpRttValElem.innerText = `${rtt} ms`;
+                }
+            }
 
-                    if (remaining <= 0) {
-                        clearInterval(countdownTimer);
-                        countdownTimer = null;
-                        statusText.innerText = `正在播放: ${filename}`;
-                    } else {
-                        statusText.innerText = `考场同步倒计时... ${(remaining / 1000).toFixed(2)} 秒`;
+            else if (msg.type === 'pong') {}
+
+            else if (msg.type === 'audio_list') {
+                mp3Files = msg.files;
+                renderPlaylist();
+                if (mp3Files.length > 0 && !audioBuffers[mp3Files[currentIndex]]) {
+                    await preloadAndDecode(mp3Files[currentIndex]);
+                }
+            }
+
+            else if (msg.type === 'audio:select') {
+                const filename = msg.filename;
+                const index = mp3Files.indexOf(filename);
+                if (index !== -1) {
+                    currentIndex = index;
+                    pauseOffset = 0;
+                    updateRadioSelection();
+                    await preloadAndDecode(filename);
+                }
+            }
+
+            else if (msg.type === 'audio:schedule_play') {
+                const filename = msg.filename;
+                const targetServerTime = msg.targetTime;
+                let basePosition = msg.position || 0;
+
+                const index = mp3Files.indexOf(filename);
+                if (index !== -1) {
+                    currentIndex = index;
+                    updateRadioSelection();
+                }
+
+                statusText.innerText = `正在准备考场音频缓存...`;
+                
+                let buffer = audioBuffers[filename];
+                if (!buffer) {
+                    buffer = await preloadAndDecode(filename);
+                }
+
+                if (!buffer || !buffer.duration) {
+                    statusText.innerText = "音频解码未完成，请点击播放按钮";
+                    return;
+                }
+
+                stopAudioNode();
+                initAudioContext();
+                
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+
+                currentDuration = buffer.duration;
+                totalTimeText.innerText = formatTime(currentDuration);
+
+                const nowServer = Date.now() + timeOffset;
+                let startPos = basePosition;
+                
+                if (nowServer >= targetServerTime) {
+                    const elapsedServerSeconds = (nowServer - targetServerTime) / 1000;
+                    startPos = basePosition + elapsedServerSeconds;
+                }
+
+                if (isNaN(startPos) || startPos < 0) startPos = 0;
+                if (startPos >= currentDuration) {
+                    statusText.innerText = `曲目已播放完毕`;
+                    return;
+                }
+
+                const currentSourceNode = audioCtx.createBufferSource();
+                currentSourceNode.buffer = buffer;
+                currentSourceNode.connect(audioCtx.destination);
+                
+                currentSourceNode.onended = () => {
+                    if (currentSource === currentSourceNode) {
+                        currentSource = null;
+                        stopProgressLoop();
+                        isPlaying = false;
+                        playPauseBtn.innerText = "▶ 播放";
                     }
-                }, 50);
-            } else {
-                statusText.innerText = `正在播放: ${filename} (已多设备实时同步)`;
-            }
-        }
+                };
 
-        else if (msg.type === 'audio:pause') {
-            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-            if (currentSource) {
-                pauseOffset = startPositionOffset + (audioCtx.currentTime - playbackStartedAt);
-            }
-            stopAudioNode();
-            stopProgressLoop();
-            
-            isPlaying = false;
-            playPauseBtn.innerText = "▶ 播放";
-            statusText.innerText = `已暂停 (进度: ${formatTime(pauseOffset)})`;
-        }
+                currentSource = currentSourceNode;
+                startPositionOffset = startPos;
 
-        else if (msg.type === 'audio:stop') {
-            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-            stopAudioNode();
-            stopProgressLoop();
-            pauseOffset = 0;
-            updateProgressUI(0, 0);
-            
-            isPlaying = false;
-            playPauseBtn.innerText = "▶ 播放";
-            statusText.innerText = '已停止';
-        }
-    };
+                let targetAudioTime;
+                const timeLeft = targetServerTime - nowServer;
+
+                if (timeLeft > 200) {
+                    const targetLocalTime = targetServerTime - timeOffset;
+                    targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
+                } else {
+                    targetAudioTime = audioCtx.currentTime + 0.05;
+                }
+                
+                try {
+                    currentSourceNode.start(targetAudioTime, startPos);
+                } catch (e) {
+                    console.error("Audio start 错误被拦截:", e);
+                    currentSourceNode.start(audioCtx.currentTime + 0.05, 0);
+                }
+
+                playbackStartedAt = targetAudioTime;
+                startProgressLoop();
+                
+                isPlaying = true;
+                playPauseBtn.innerText = "⏸ 暂停";
+
+                if (countdownTimer) clearInterval(countdownTimer);
+
+                if (timeLeft > 200) {
+                    countdownTimer = setInterval(() => {
+                        const currentNowServer = Date.now() + timeOffset;
+                        const remaining = targetServerTime - currentNowServer;
+
+                        if (remaining <= 0) {
+                            clearInterval(countdownTimer);
+                            countdownTimer = null;
+                            statusText.innerText = `正在播放: ${filename}`;
+                        } else {
+                            statusText.innerText = `考场同步倒计时... ${(remaining / 1000).toFixed(2)} 秒`;
+                        }
+                    }, 50);
+                } else {
+                    statusText.innerText = `正在播放: ${filename} (已多设备实时同步)`;
+                }
+            }
+
+            else if (msg.type === 'audio:pause') {
+                if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+                if (currentSource) {
+                    pauseOffset = startPositionOffset + (audioCtx.currentTime - playbackStartedAt);
+                }
+                stopAudioNode();
+                stopProgressLoop();
+                
+                isPlaying = false;
+                playPauseBtn.innerText = "▶ 播放";
+                statusText.innerText = `已暂停 (进度: ${formatTime(pauseOffset)})`;
+            }
+
+            else if (msg.type === 'audio:stop') {
+                if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+                stopAudioNode();
+                stopProgressLoop();
+                pauseOffset = 0;
+                updateProgressUI(0, 0);
+                
+                isPlaying = false;
+                playPauseBtn.innerText = "▶ 播放";
+                statusText.innerText = '已停止';
+            }
+        };
+    }
+
+    // 初始化自动发起首次连接
+    connectWs();
 
     function stopAudioNode() {
         if (currentSource) {
@@ -464,6 +450,7 @@
     }
 
     function syncNtp(callback) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
         const t0 = Date.now();
         ws.send(JSON.stringify({ type: 'ntp:sync', t0: t0 }));
         if (callback) setTimeout(callback, 100);
@@ -472,6 +459,30 @@
     function actionWithSync(actionCallback) {
         initAudioContext();
         syncNtp(actionCallback);
+    }
+
+    async function uploadAudioFile() {
+        const fileInput = document.getElementById('mp3File');
+        if (fileInput.files.length === 0) return;
+
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+
+        statusText.innerText = `正在上传 ${file.name}...`;
+        try {
+            const response = await fetch('/upload', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.success) {
+                statusText.innerText = `上传成功: ${result.filename}`;
+                fileInput.value = '';
+            } else {
+                statusText.innerText = `上传失败: ${result.message}`;
+            }
+        } catch (e) {
+            statusText.innerText = `上传出错`;
+            console.error(e);
+        }
     }
 
     function togglePlayPause() {
@@ -487,7 +498,7 @@
     function playSelected() {
         if (mp3Files.length === 0) return alert("audio 文件夹下没有 mp3 文件！");
         const selectedRadio = document.querySelector('input[name="audioFile"]:checked');
-        if (-1 === mp3Files.indexOf(selectedRadio.value)) return alert("请先选择要播放的曲目！");
+        if (!selectedRadio) return alert("请先选择要播放的曲目！");
 
         const filename = selectedRadio.value;
         ws.send(JSON.stringify({
