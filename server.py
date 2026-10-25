@@ -15,7 +15,7 @@ AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
 clients = set()
 
-# 全局播放状态机
+# 全局播放状态机（用于新设备加入时自动追赶同步）
 playback_state = {
     "status": "stopped",       # "playing", "paused", "stopped"
     "filename": None,
@@ -74,7 +74,7 @@ async def websocket_endpoint(websocket: WebSocket):
             "files": get_audio_files()
         })
 
-        # 2. 如果当前有正在播放的曲目，向新连接的设备同步
+        # 2. 如果当前有正在播放的曲目，向新连接的设备同步状态
         if playback_state["status"] == "playing" and playback_state["filename"]:
             now = int(time.time() * 1000)
             current_pos = playback_state["start_pos"]
@@ -112,6 +112,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
             elif msg_type == "ping":
+                # 心跳保持连接，防止代理超时切断
                 await websocket.send_json({"type": "pong"})
 
             elif msg_type == "refresh_files":
@@ -139,7 +140,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 filename = data.get("filename")
                 start_position = data.get("position", 0.0)
                 
-                delay = 6000  
+                delay = 6000  # 公网 6 秒缓冲倒计时
                 target_time = int(time.time() * 1000) + delay
 
                 playback_state["status"] = "playing"
