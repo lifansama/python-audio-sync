@@ -112,7 +112,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
             elif msg_type == "ping":
-                # 心跳保持连接，防止代理超时切断
                 await websocket.send_json({"type": "pong"})
 
             elif msg_type == "refresh_files":
