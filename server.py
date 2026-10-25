@@ -8,17 +8,14 @@ import uvicorn
 
 app = FastAPI()
 
-# 托管 static 文件夹 (包含 html 和 audio 资源)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 AUDIO_DIR = Path("static/audio")
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
-# 保持所有已连接的 WebSocket
 clients = set()
 
 def get_audio_files():
-    """扫描 static/audio/ 目录下所有的 .mp3 文件"""
     if not AUDIO_DIR.exists():
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     
@@ -29,11 +26,9 @@ def get_audio_files():
     mp3_files.sort()
     return mp3_files
 
-# ====== 新增：根路径直接返回 index.html ======
 @app.get("/")
 async def read_index():
     return FileResponse("static/index.html")
-# ============================================
 
 @app.post("/upload")
 async def upload_audio(file: UploadFile = File(...)):
@@ -54,7 +49,7 @@ async def upload_audio(file: UploadFile = File(...)):
         try:
             await client.send_json(message)
         except:
-            pass
+            clients.discard(client)
             
     return {"success": True, "filename": file.filename}
 
@@ -64,12 +59,12 @@ async def websocket_endpoint(websocket: WebSocket):
     clients.add(websocket)
     print(f"客户端已连接: {websocket.client}")
 
-    await websocket.send_json({
-        "type": "audio_list",
-        "files": get_audio_files()
-    })
-
     try:
+        await websocket.send_json({
+            "type": "audio_list",
+            "files": get_audio_files()
+        })
+
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
@@ -89,6 +84,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     "files": get_audio_files()
                 })
 
+            # 选歌广播（已加 try...except 与死连接清理）
             elif msg_type == "cmd:select":
                 filename = data.get("filename")
                 message = {
@@ -96,8 +92,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     "filename": filename
                 }
                 for client in list(clients):
-                    await client.send_json(message)
+                    try:
+                        await client.send_json(message)
+                    except:
+                        clients.discard(client)
 
+            # 播放广播（已加 try...except 与死连接清理）
             elif msg_type == "cmd:play":
                 filename = data.get("filename")
                 start_position = data.get("position", 0.0)
@@ -113,17 +113,28 @@ async def websocket_endpoint(websocket: WebSocket):
                     "position": start_position
                 }
                 for client in list(clients):
-                    await client.send_json(message)
+                    try:
+                        await client.send_json(message)
+                    except:
+                        clients.discard(client)
 
+            # 暂停广播（已加 try...except 与死连接清理）
             elif msg_type == "cmd:pause":
                 message = {"type": "audio:pause"}
                 for client in list(clients):
-                    await client.send_json(message)
+                    try:
+                        await client.send_json(message)
+                    except:
+                        clients.discard(client)
 
+            # 停止广播（已加 try...except 与死连接清理）
             elif msg_type == "cmd:stop":
                 message = {"type": "audio:stop"}
                 for client in list(clients):
-                    await client.send_json(message)
+                    try:
+                        await client.send_json(message)
+                    except:
+                        clients.discard(client)
 
     except WebSocketDisconnect:
         clients.remove(websocket)
