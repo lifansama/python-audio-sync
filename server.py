@@ -8,7 +8,7 @@ import uvicorn
 
 app = FastAPI()
 
-# 💡 自动注入响应头中间件，彻底解决浏览器 CSP 策略对 connect-src 和媒体资源的拦截
+# CSP 响应头中间件
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -25,7 +25,6 @@ AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
 clients = set()
 
-# 全局播放状态机（用于新设备加入时自动追赶同步）
 playback_state = {
     "status": "stopped",       # "playing", "paused", "stopped"
     "filename": None,
@@ -78,26 +77,27 @@ async def websocket_endpoint(websocket: WebSocket):
     print(f"客户端已连接: {websocket.client}")
 
     try:
-        # 1. 下发曲目列表
         await websocket.send_json({
             "type": "audio_list",
             "files": get_audio_files()
         })
 
-        # 2. 核心新功能：如果当前有正在播放的曲目，向新连接的设备同步状态并自动追赶
+        # 新设备加入时的状态同步（已修复 4 秒缓冲位置偏移）
         if playback_state["status"] == "playing" and playback_state["filename"]:
             now = int(time.time() * 1000)
             current_pos = playback_state["start_pos"]
             if now >= playback_state["target_time"]:
                 current_pos += (now - playback_state["target_time"]) / 1000.0
             
-            sync_target_time = now + 4000  # 留出 4 秒缓冲进行加载和预备
+            sync_target_time = now + 4000
+            target_pos_at_start = current_pos + 4.0  # 补偿 4 秒缓冲推进量
+
             await websocket.send_json({
                 "type": "audio:schedule_play",
                 "targetTime": sync_target_time,
                 "audioUrl": f"/static/audio/{playback_state['filename']}",
                 "filename": playback_state["filename"],
-                "position": current_pos
+                "position": target_pos_at_start
             })
         elif playback_state["status"] == "paused" and playback_state["filename"]:
             await websocket.send_json({
@@ -122,7 +122,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
             elif msg_type == "ping":
-                # 心跳保持连接，防止反向代理超时切断
                 await websocket.send_json({"type": "pong"})
 
             elif msg_type == "refresh_files":
@@ -150,7 +149,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 filename = data.get("filename")
                 start_position = data.get("position", 0.0)
                 
-                delay = 6000  # 公网 6 秒缓冲倒计时
+                delay = 6000  
                 target_time = int(time.time() * 1000) + delay
 
                 playback_state["status"] = "playing"
