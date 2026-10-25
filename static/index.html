@@ -156,9 +156,11 @@
         }
         if (audioCtx.state === 'suspended') {
             audioCtx.resume().then(() => {
-                statusText.innerText = "音频引擎已就绪，可正常同步播放";
-                statusText.style.color = "#007bff";
-                statusText.style.background = "#e9f3ff";
+                if (!isPlaying) {
+                    statusText.innerText = "音频引擎已就绪，可正常同步播放";
+                    statusText.style.color = "#007bff";
+                    statusText.style.background = "#e9f3ff";
+                }
                 updateAudioStateUI();
             }).catch(err => {
                 console.error("AudioContext 恢复受阻:", err);
@@ -173,7 +175,7 @@
 
     function manualResumeAudio() {
         initAudioContext();
-        if (audioCtx && audioCtx.state === 'running') {
+        if (audioCtx && audioCtx.state === 'running' && !isPlaying) {
             statusText.innerText = "✅ 音频上下文已激活";
         }
         updateAudioStateUI();
@@ -181,7 +183,6 @@
 
     setInterval(updateAudioStateUI, 1000);
 
-    // 💡 补回缺失的预加载与解码函数
     async function preloadAndDecode(filename) {
         initAudioContext();
         if (audioBuffers[filename]) return audioBuffers[filename];
@@ -195,12 +196,12 @@
             statusText.innerText = `就绪: ${filename}`;
             return decodedBuffer;
         } catch (e) {
-            statusText.innerText = `加载音频失败: ${filename}`;
+            statusText.innerText = `⚠️ 音频加载异常（可能网络波动）`;
             console.error(e);
         }
     }
 
-    // WebSocket 独立连接与重连管理函数
+    // WebSocket 独立连接与重连管理
     function connectWs() {
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
             return;
@@ -215,7 +216,10 @@
         ws.onopen = () => {
             wsStatusElem.innerText = "已连接 (Online)";
             wsStatusElem.className = "badge-online";
-            statusText.innerText = "服务器已连接，随时准备接收考试指令";
+            
+            if (!isPlaying) {
+                statusText.innerText = "服务器已连接，随时准备接收考试指令";
+            }
             
             syncNtp();
             if (ntpInterval) clearInterval(ntpInterval);
@@ -232,7 +236,15 @@
         ws.onclose = () => {
             wsStatusElem.innerText = "已断开连接 (点击重连)";
             wsStatusElem.className = "badge-offline";
-            statusText.innerText = "⚠️ 与服务器断开连接，请点击下方状态栏重新连接";
+            
+            // 💡 核心容灾策略：断网时绝不中断当前播放，给予离线保护提示
+            if (isPlaying) {
+                statusText.innerText = "⚠️ 网络闪断，正依靠本地音频安全播放中（考试不受影响）";
+                statusText.style.color = "#856404";
+                statusText.style.background = "#fff3cd";
+            } else {
+                statusText.innerText = "⚠️ 与服务器断开连接，请点击下方状态栏重新连接";
+            }
         };
 
         ws.onerror = () => {
@@ -275,6 +287,7 @@
             }
 
             else if (msg.type === 'audio:select') {
+                if (isPlaying) return; // 正在播放中忽略选择切换
                 const filename = msg.filename;
                 const index = mp3Files.indexOf(filename);
                 if (index !== -1) {
@@ -286,6 +299,12 @@
             }
 
             else if (msg.type === 'audio:schedule_play') {
+                // 💡 宽容策略：如果当前设备正在本地安稳播放中，重连后忽略服务端的重播/重对齐指令，防止打断
+                if (isPlaying && currentSource) {
+                    console.log("当前正在本地离线安全播放，已忽略重连同步指令");
+                    return;
+                }
+
                 const filename = msg.filename;
                 const targetServerTime = msg.targetTime;
                 let basePosition = msg.position || 0;
@@ -342,6 +361,9 @@
                         stopProgressLoop();
                         isPlaying = false;
                         playPauseBtn.innerText = "▶ 播放";
+                        statusText.innerText = "播放完毕";
+                        statusText.style.color = "#007bff";
+                        statusText.style.background = "#e9f3ff";
                     }
                 };
 
@@ -414,6 +436,8 @@
                 isPlaying = false;
                 playPauseBtn.innerText = "▶ 播放";
                 statusText.innerText = '已停止';
+                statusText.style.color = "#007bff";
+                statusText.style.background = "#e9f3ff";
             }
         };
     }
