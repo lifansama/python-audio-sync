@@ -2,653 +2,462 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UniSound | 考场同步听力广播系统</title>
-    <!-- Tailwind CSS for sleek styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            50: '#f0f7ff',
-                            100: '#e0effe',
-                            500: '#0284c7',
-                            600: '#0369a1',
-                            700: '#075985',
-                            900: '#0c4a6e',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>多设备零延迟精准同步控制台</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-        .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); }
-        .pulse-subtle { animation: pulseSlow 3s infinite ease-in-out; }
-        @keyframes pulseSlow {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #eef2f5; margin-top: 30px; }
+        .container { background: white; max-width: 520px; margin: 0 auto; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; color: #333; }
+        #status { font-size: 14px; font-weight: bold; color: #007bff; background: #e9f3ff; padding: 10px; border-radius: 6px; cursor: pointer; }
+        
+        .upload-box { margin: 15px 0; padding: 12px; background: #f8f9fa; border: 2px dashed #cbd3da; border-radius: 6px; text-align: left; font-size: 13px; }
+        .upload-box input { width: 100%; margin-top: 5px; }
+
+        .progress-container { margin: 20px 0; text-align: left; }
+        .progress-bar-bg { background: #e9ecef; height: 8px; border-radius: 4px; overflow: hidden; position: relative; cursor: pointer; }
+        .progress-bar-fill { background: #28a745; height: 100%; width: 0%; }
+        .time-info { display: flex; justify-content: space-between; font-size: 12px; color: #6c757d; margin-top: 5px; }
+
+        .file-list { text-align: left; margin: 15px 0; max-height: 180px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 6px; }
+        .file-item { padding: 6px 10px; margin: 4px 0; cursor: pointer; border-radius: 4px; display: flex; align-items: center; }
+        .file-item:hover { background-color: #f1f1f1; }
+        .file-item input { margin-right: 10px; }
+        
+        .controls button { padding: 10px 16px; font-size: 14px; margin: 5px; border: none; border-radius: 6px; background: #28a745; color: white; cursor: pointer; transition: 0.2s; }
+        .controls button:hover { opacity: 0.9; }
+        .controls button.btn-secondary { background: #6c757d; }
+        .controls button.btn-danger { background: #dc3545; }
+        .controls button.btn-warning { background: #ffc107; color: #212529; }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-800 min-h-screen flex flex-col justify-between selection:bg-sky-500 selection:text-white">
+<body>
 
-    <!-- Header Section -->
-    <header class="border-b border-slate-800 bg-slate-950/80 sticky top-0 z-50 backdrop-blur-md">
-        <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
-            <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
-                    <i class="fa-solid font-bold fa-broadcast-tower text-xl"></i>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                        UniSound <span class="text-xs px-2 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800/50 font-medium">考场专供版</span>
-                    </h1>
-                    <p class="text-xs text-slate-400">Multi-Classroom Zero-Latency Audio Synchronization System</p>
-                </div>
-            </div>
+<div class="container">
+    <h2>多设备零延迟精准同步控制台</h2>
+    <div id="status" onclick="manualResumeAudio()">正在连接服务器与初始化音频引擎...（点击此处可手动激活声音）</div>
 
-            <!-- Global Status Bar & Activation Handler -->
-            <div id="audioUnlockBanner" onclick="manualResumeAudio()" class="cursor-pointer transition-all duration-300 px-4 py-2 rounded-lg border flex items-center space-x-2 text-xs font-semibold bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20">
-                <i class="fa-solid fa-volume-xmark text-sm animate-bounce"></i>
-                <span id="audioStatusText">音频引擎受到阻碍：点击此栏激活声学引擎</span>
-            </div>
+    <div class="upload-box">
+        <label for="mp3File"><strong>上传新的 MP3 曲目：</strong></label>
+        <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
+    </div>
+
+    <div class="progress-container">
+        <div class="progress-bar-bg" id="progressBarBg">
+            <div class="progress-bar-fill" id="progressBarFill"></div>
         </div>
-    </header>
-
-    <!-- Main Content Grid -->
-    <main class="max-w-6xl mx-auto px-4 py-8 w-full flex-grow grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <!-- Left Column: Real-time Telemetry & Diagnostics -->
-        <div class="space-y-6">
-            <!-- Telemetry Card -->
-            <div class="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-5 text-slate-200 shadow-xl">
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center justify-between">
-                    <span><i class="fa-solid fa-microchip mr-2 text-sky-400"></i>系统实时参数</span>
-                    <span id="wsBadge" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                        ● 未连接
-                    </span>
-                </h2>
-                
-                <div class="grid grid-cols-2 gap-3 text-sm">
-                    <div class="bg-slate-900/60 border border-slate-700/40 p-3 rounded-xl">
-                        <span class="text-xs text-slate-400 block mb-1">NTP 时钟偏移</span>
-                        <span id="ntpOffsetVal" class="text-base font-mono font-bold text-sky-400">0.00 ms</span>
-                    </div>
-                    <div class="bg-slate-900/60 border border-slate-700/40 p-3 rounded-xl">
-                        <span class="text-xs text-slate-400 block mb-1">音频采样率</span>
-                        <span id="sampleRateVal" class="text-base font-mono font-bold text-emerald-400">未准备</span>
-                    </div>
-                </div>
-
-                <div class="mt-4 pt-3 border-t border-slate-700/50 flex justify-between items-center text-xs text-slate-400">
-                    <span>链路防抖机制：RTT &lt; 250ms</span>
-                    <span id="rttDisplay" class="font-mono text-slate-300">RTT: --</span>
-                </div>
-            </div>
-
-            <!-- Exam Mode Rules Card -->
-            <div class="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-5 text-slate-300">
-                <h3 class="text-sm font-semibold text-slate-200 mb-2 flex items-center">
-                    <i class="fa-solid fa-shield-halved text-emerald-400 mr-2"></i>考场防脱节规程
-                </h3>
-                <ul class="text-xs space-y-2 text-slate-400 list-disc list-inside">
-                    <li>系统接收指令后自动保留 <span class="text-slate-200">6 秒预缓冲窗口</span>。</li>
-                    <li>新加入的监听设备将由中央状态机同步至精准播报点。</li>
-                    <li>考前请在各大考场客户端点击激活音频。</li>
-                </ul>
-            </div>
+        <div class="time-info">
+            <span id="currentTime">00:00</span>
+            <span id="totalTime">00:00</span>
         </div>
+    </div>
 
-        <!-- Center & Right Column: Track Manager & Console Player -->
-        <div class="lg:col-span-2 space-y-6">
+    <div style="text-align: right; margin-top: 5px;">
+        <button onclick="refreshFileList()" class="btn-secondary" style="font-size: 12px; padding: 4px 8px;">刷新曲目列表</button>
+    </div>
 
-            <!-- Audio Master Console -->
-            <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-2xl space-y-6">
-                
-                <!-- Display Track Playing Title -->
-                <div class="flex justify-between items-start border-b border-slate-700/60 pb-4">
-                    <div>
-                        <span class="text-xs font-semibold text-sky-400 uppercase tracking-widest">当前选中听力试题</span>
-                        <h2 id="currentTrackTitle" class="text-lg font-bold text-white mt-1">未选择音源文件</h2>
-                    </div>
-                    <span id="playbackStateBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-700 text-slate-300">
-                        就绪
-                    </span>
-                </div>
+    <div class="file-list" id="playlist">
+        <p style="color:#888; text-align:center;">正在加载曲目列表...</p>
+    </div>
 
-                <!-- Progress Visualizer Bar -->
-                <div class="space-y-2">
-                    <div class="w-full bg-slate-900 rounded-full h-3 overflow-hidden p-0.5 border border-slate-700/50 relative cursor-pointer" id="progressBg">
-                        <div id="progressBarFill" class="bg-gradient-to-r from-sky-500 to-emerald-400 h-full rounded-full w-0 transition-all duration-100"></div>
-                    </div>
-                    <div class="flex justify-between items-center text-xs font-mono text-slate-400">
-                        <span id="currentTime">00:00</span>
-                        <span id="statusMessage" class="font-sans text-sky-400 font-medium truncate max-w-[250px] text-center">系统准备完毕</span>
-                        <span id="totalTime">00:00</span>
-                    </div>
-                </div>
+    <div class="controls">
+        <button id="playPauseBtn" onclick="togglePlayPause()" class="btn-warning">▶ 播放</button>
+        <button onclick="actionWithSync(() => stop())" class="btn-danger">停止</button>
+    </div>
+</div>
 
-                <!-- Action Controls Panel -->
-                <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
-                    <div class="flex items-center space-x-3">
-                        <button id="playPauseBtn" onclick="togglePlayPause()" class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold text-sm shadow-lg shadow-emerald-500/25 hover:brightness-110 active:scale-95 transition flex items-center space-x-2">
-                            <i class="fa-solid fa-play"></i>
-                            <span>开始播报</span>
-                        </button>
+<script>
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    
+    const statusText = document.getElementById('status');
+    const playlistContainer = document.getElementById('playlist');
+    const progressBarFill = document.getElementById('progressBarFill');
+    const currentTimeText = document.getElementById('currentTime');
+    const totalTimeText = document.getElementById('totalTime');
+    const playPauseBtn = document.getElementById('playPauseBtn');
 
-                        <button onclick="actionWithSync(() => stop())" class="px-5 py-3 rounded-xl bg-slate-700 hover:bg-rose-600 text-slate-200 hover:text-white font-medium text-sm transition flex items-center space-x-2">
-                            <i class="fa-solid fa-square"></i>
-                            <span>停止播报</span>
-                        </button>
-                    </div>
+    let audioCtx = null;
+    let audioBuffers = {}; 
+    let currentSource = null; 
+    let pauseOffset = 0;     
+    let playbackStartedAt = 0; 
+    let startPositionOffset = 0; 
+    let currentDuration = 0;   
+    let progressAnimId = null; 
+    let countdownTimer = null; 
+    let isPlaying = false;    
 
-                    <!-- Upload Controls -->
-                    <label class="cursor-pointer px-4 py-2.5 rounded-xl border border-dashed border-slate-600 bg-slate-900/40 hover:bg-slate-900 text-slate-300 text-xs font-medium transition flex items-center space-x-2">
-                        <i class="fa-solid fa-cloud-arrow-up text-sky-400"></i>
-                        <span>上传听力试题 (.mp3)</span>
-                        <input type="file" id="mp3File" accept=".mp3" class="hidden" onchange="uploadAudioFile()">
-                    </label>
-                </div>
-            </div>
+    let timeOffset = 0; 
+    let ntpSamples = [];
+    let mp3Files = [];
+    let currentIndex = 0;
 
-            <!-- Playlist Card -->
-            <div class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5 space-y-3">
-                <div class="flex justify-between items-center">
-                    <h3 class="text-sm font-bold text-slate-200 flex items-center">
-                        <i class="fa-solid fa-list-check text-sky-400 mr-2"></i>试题资源库 (static/audio)
-                    </h3>
-                    <button onclick="refreshFileList()" class="text-xs text-slate-400 hover:text-sky-400 transition flex items-center space-x-1">
-                        <i class="fa-solid fa-arrows-rotate"></i>
-                        <span>刷新列表</span>
-                    </button>
-                </div>
+    function initAudioContext() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().then(() => {
+                statusText.innerText = "音频引擎已就绪，可正常同步播放";
+                statusText.style.color = "#007bff";
+                statusText.style.background = "#e9f3ff";
+            }).catch(err => {
+                console.error("AudioContext 恢复受阻:", err);
+                statusText.innerText = "⚠️ 浏览器拦截了声音，请点击页面任意处以解除静默";
+                statusText.style.color = "#856404";
+                statusText.style.background = "#fff3cd";
+            });
+        }
+    }
 
-                <div id="playlist" class="space-y-2 max-h-56 overflow-y-auto pr-1">
-                    <div class="text-center py-6 text-slate-500 text-xs">正在扫描试题目录...</div>
-                </div>
-            </div>
+    function manualResumeAudio() {
+        initAudioContext();
+        if (audioCtx && audioCtx.state === 'running') {
+            statusText.innerText = "✅ 音频上下文已激活";
+        }
+    }
 
-        </div>
-    </main>
+    async function uploadAudioFile() {
+        const fileInput = document.getElementById('mp3File');
+        if (fileInput.files.length === 0) return;
 
-    <!-- Footer -->
-    <footer class="border-t border-slate-800/80 bg-slate-950/60 py-4 text-center text-xs text-slate-500">
-        UniSound &copy; 考场级音频无缝零时差同步广播系统
-    </footer>
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append("file", file);
 
-    <!-- Web Audio & Sync Core Engine -->
-    <script>
-        // Safe WebSocket initialization to prevent empty host / cross-origin security errors in sandbox environments
-        let ws = null;
+        statusText.innerText = `正在上传 ${file.name}...`;
         try {
-            const host = window.location.host;
-            if (host) {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                ws = new WebSocket(`${protocol}//${host}/ws`);
+            const response = await fetch('/upload', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.success) {
+                statusText.innerText = `上传成功: ${result.filename}`;
+                fileInput.value = '';
             } else {
-                console.warn("WebSocket target host is unavailable in this execution context.");
+                statusText.innerText = `上传失败: ${result.message}`;
             }
-        } catch (err) {
-            console.error("Failed to construct WebSocket:", err);
+        } catch (e) {
+            statusText.innerText = `上传出错`;
+            console.error(e);
         }
-        
-        const audioUnlockBanner = document.getElementById('audioUnlockBanner');
-        const audioStatusText = document.getElementById('audioStatusText');
-        const wsBadge = document.getElementById('wsBadge');
-        const playlistContainer = document.getElementById('playlist');
-        const progressBarFill = document.getElementById('progressBarFill');
-        const currentTimeText = document.getElementById('currentTime');
-        const totalTimeText = document.getElementById('totalTime');
-        const playPauseBtn = document.getElementById('playPauseBtn');
-        const statusMessage = document.getElementById('statusMessage');
-        const currentTrackTitle = document.getElementById('currentTrackTitle');
-        const playbackStateBadge = document.getElementById('playbackStateBadge');
-        const ntpOffsetVal = document.getElementById('ntpOffsetVal');
-        const sampleRateVal = document.getElementById('sampleRateVal');
-        const rttDisplay = document.getElementById('rttDisplay');
+    }
 
-        let audioCtx = null;
-        let audioBuffers = {}; 
-        let currentSource = null; 
-        let pauseOffset = 0;     
-        let playbackStartedAt = 0; 
-        let startPositionOffset = 0; 
-        let currentDuration = 0;   
-        let progressAnimId = null; 
-        let countdownTimer = null; 
-        let isPlaying = false;    
+    async function preloadAndDecode(filename) {
+        initAudioContext();
+        if (audioBuffers[filename]) return audioBuffers[filename];
 
-        let timeOffset = 0; 
-        let ntpSamples = [];
-        let mp3Files = [];
-        let currentIndex = 0;
-
-        function initAudioContext() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume().then(() => {
-                    updateAudioEngineUI(true);
-                }).catch(err => {
-                    console.error("AudioContext Unlock Blocked:", err);
-                    updateAudioEngineUI(false);
-                });
-            } else if (audioCtx.state === 'running') {
-                updateAudioEngineUI(true);
-            }
+        try {
+            statusText.innerText = `正在后台预加载: ${filename}...`;
+            const response = await fetch(`/static/audio/${filename}`);
+            const arrayBuffer = await response.arrayBuffer();
+            const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            audioBuffers[filename] = decodedBuffer;
+            statusText.innerText = `就绪: ${filename}`;
+            return decodedBuffer;
+        } catch (e) {
+            statusText.innerText = `加载音频失败: ${filename}`;
+            console.error(e);
         }
+    }
 
-        function updateAudioEngineUI(isUnlocked) {
-            if (isUnlocked) {
-                audioUnlockBanner.className = "px-4 py-2 rounded-lg border flex items-center space-x-2 text-xs font-semibold bg-emerald-500/10 border-emerald-500/30 text-emerald-400";
-                audioStatusText.innerText = "音频引擎已激活，准备同步播报";
-                audioUnlockBanner.querySelector('i').className = "fa-solid fa-volume-high text-sm";
-                if (audioCtx) {
-                    sampleRateVal.innerText = `${(audioCtx.sampleRate / 1000).toFixed(1)} kHz`;
-                }
-            } else {
-                audioUnlockBanner.className = "cursor-pointer animate-pulse px-4 py-2 rounded-lg border flex items-center space-x-2 text-xs font-semibold bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20";
-                audioStatusText.innerText = "受浏览器安全限制：点击此处激活考场音响";
-                audioUnlockBanner.querySelector('i').className = "fa-solid fa-volume-xmark text-sm";
+    ws.onopen = () => {
+        syncNtp();
+        setInterval(() => syncNtp(), 10000);
+        setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 20000);
+    };
+
+    ws.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === 'ntp:sync:reply') {
+            const t3 = Date.now();
+            const rtt = (t3 - msg.t0) - (msg.t2 - msg.t1);
+            const serverTime = msg.t2 + (t3 - msg.t0) / 2;
+            const currentOffset = serverTime - t3;
+
+            if (rtt < 250) {
+                ntpSamples.push({ offset: currentOffset, rtt: rtt });
+                if (ntpSamples.length > 5) ntpSamples.shift();
+                ntpSamples.sort((a, b) => a.rtt - b.rtt);
+                timeOffset = ntpSamples[0].offset;
             }
         }
 
-        function manualResumeAudio() {
+        else if (msg.type === 'pong') {}
+
+        else if (msg.type === 'audio_list') {
+            mp3Files = msg.files;
+            renderPlaylist();
+            if (mp3Files.length > 0 && !audioBuffers[mp3Files[currentIndex]]) {
+                await preloadAndDecode(mp3Files[currentIndex]);
+            }
+        }
+
+        else if (msg.type === 'audio:select') {
+            const filename = msg.filename;
+            const index = mp3Files.indexOf(filename);
+            if (index !== -1) {
+                currentIndex = index;
+                pauseOffset = 0;
+                updateRadioSelection();
+                await preloadAndDecode(filename);
+            }
+        }
+
+        else if (msg.type === 'audio:schedule_play') {
+            const filename = msg.filename;
+            const targetServerTime = msg.targetTime;
+            let startPos = msg.position || 0;
+
+            const index = mp3Files.indexOf(filename);
+            if (index !== -1) {
+                currentIndex = index;
+                updateRadioSelection();
+            }
+
+            statusText.innerText = `正在准备音频缓存...`;
+            let buffer = audioBuffers[filename];
+            if (!buffer) {
+                buffer = await preloadAndDecode(filename);
+            }
+
+            if (!buffer || !buffer.duration) {
+                statusText.innerText = "音频解码未完成，请点击播放按钮";
+                return;
+            }
+
+            stopAudioNode();
             initAudioContext();
-        }
+            
+            // 显式检查并恢复音频上下文状态
+            if (audioCtx && audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
 
-        async function uploadAudioFile() {
-            const fileInput = document.getElementById('mp3File');
-            if (fileInput.files.length === 0) return;
+            currentDuration = buffer.duration;
+            totalTimeText.innerText = formatTime(currentDuration);
 
-            const file = fileInput.files[0];
-            const formData = new FormData();
-            formData.append("file", file);
+            if (isNaN(startPos) || startPos < 0 || startPos >= currentDuration) {
+                startPos = 0;
+            }
 
-            statusMessage.innerText = `正在上传 ${file.name}...`;
+            const currentSourceNode = audioCtx.createBufferSource();
+            currentSourceNode.buffer = buffer;
+            currentSourceNode.connect(audioCtx.destination);
+            
+            currentSourceNode.onended = () => {
+                if (currentSource === currentSourceNode) {
+                    currentSource = null;
+                    stopProgressLoop();
+                    isPlaying = false;
+                    playPauseBtn.innerText = "▶ 播放";
+                }
+            };
+
+            currentSource = currentSourceNode;
+            startPositionOffset = startPos;
+
+            const targetLocalTime = targetServerTime - timeOffset;
+            const targetAudioTime = audioCtx.currentTime + Math.max(0.1, (targetLocalTime - Date.now()) / 1000);
+            
             try {
-                const response = await fetch('/upload', { method: 'POST', body: formData });
-                const result = await response.json();
-                if (result.success) {
-                    statusMessage.innerText = `试题上传成功: ${result.filename}`;
-                    fileInput.value = '';
+                currentSourceNode.start(targetAudioTime, startPos);
+            } catch (e) {
+                console.error("Audio start 错误被拦截:", e);
+                try {
+                    currentSourceNode.start(targetAudioTime, 0);
+                } catch (innerErr) {
+                    statusText.innerText = "播放被浏览器拦截，请点击页面任意处";
+                    statusText.style.background = "#fff3cd";
+                    statusText.style.color = "#856404";
+                    return;
+                }
+            }
+
+            playbackStartedAt = targetAudioTime;
+            startProgressLoop();
+            
+            isPlaying = true;
+            playPauseBtn.innerText = "⏸ 暂停";
+
+            if (countdownTimer) clearInterval(countdownTimer);
+
+            countdownTimer = setInterval(() => {
+                const nowServer = Date.now() + timeOffset;
+                const timeLeft = targetServerTime - nowServer;
+
+                if (timeLeft <= 0) {
+                    clearInterval(countdownTimer);
+                    countdownTimer = null;
+                    statusText.innerText = `正在播放: ${filename}`;
                 } else {
-                    statusMessage.innerText = `上传失败: ${result.message}`;
+                    statusText.innerText = `同步预备中... ${(timeLeft / 1000).toFixed(2)} 秒后播放`;
                 }
-            } catch (e) {
-                statusMessage.innerText = `上传出错`;
-            }
+            }, 50);
         }
 
-        async function preloadAndDecode(filename) {
-            initAudioContext();
-            if (audioBuffers[filename]) return audioBuffers[filename];
-
-            try {
-                statusMessage.innerText = `预装载试题文件: ${filename}...`;
-                const response = await fetch(`/static/audio/${filename}`);
-                const arrayBuffer = await response.arrayBuffer();
-                const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-                audioBuffers[filename] = decodedBuffer;
-                statusMessage.innerText = `就绪`;
-                return decodedBuffer;
-            } catch (e) {
-                statusMessage.innerText = `加载试题音频失败: ${filename}`;
-            }
-        }
-
-        if (ws) {
-            ws.onopen = () => {
-                wsBadge.className = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
-                wsBadge.innerText = "● 已连入广播中心";
-                syncNtp();
-                setInterval(() => syncNtp(), 10000);
-                setInterval(() => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: 'ping' }));
-                    }
-                }, 20000);
-            };
-
-            ws.onclose = () => {
-                wsBadge.className = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-500/20 text-rose-300 border border-rose-500/30";
-                wsBadge.innerText = "● 服务器已离线";
-            };
-
-            ws.onerror = (err) => {
-                console.error("WebSocket connection error:", err);
-                wsBadge.className = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-500/20 text-rose-300 border border-rose-500/30";
-                wsBadge.innerText = "● 连接受限";
-            };
-
-            ws.onmessage = async (event) => {
-                const msg = JSON.parse(event.data);
-
-                if (msg.type === 'ntp:sync:reply') {
-                    const t3 = Date.now();
-                    const rtt = (t3 - msg.t0) - (msg.t2 - msg.t1);
-                    const serverTime = msg.t2 + (t3 - msg.t0) / 2;
-                    const currentOffset = serverTime - t3;
-
-                    rttDisplay.innerText = `RTT: ${Math.round(rtt)}ms`;
-
-                    if (rtt < 250) {
-                        ntpSamples.push({ offset: currentOffset, rtt: rtt });
-                        if (ntpSamples.length > 5) ntpSamples.shift();
-                        ntpSamples.sort((a, b) => a.rtt - b.rtt);
-                        timeOffset = ntpSamples[0].offset;
-                        ntpOffsetVal.innerText = `${timeOffset > 0 ? '+' : ''}${timeOffset.toFixed(1)} ms`;
-                    }
-                }
-
-                else if (msg.type === 'audio_list') {
-                    mp3Files = msg.files;
-                    renderPlaylist();
-                    if (mp3Files.length > 0) {
-                        currentTrackTitle.innerText = mp3Files[currentIndex] || mp3Files[0];
-                        if (!audioBuffers[mp3Files[currentIndex]]) {
-                            await preloadAndDecode(mp3Files[currentIndex]);
-                        }
-                    }
-                }
-
-                else if (msg.type === 'audio:select') {
-                    const filename = msg.filename;
-                    const index = mp3Files.indexOf(filename);
-                    if (index !== -1) {
-                        currentIndex = index;
-                        pauseOffset = 0;
-                        currentTrackTitle.innerText = filename;
-                        renderPlaylist();
-                        await preloadAndDecode(filename);
-                    }
-                }
-
-                else if (msg.type === 'audio:schedule_play') {
-                    const filename = msg.filename;
-                    const targetServerTime = msg.targetTime;
-                    let startPos = msg.position || 0;
-
-                    const index = mp3Files.indexOf(filename);
-                    if (index !== -1) {
-                        currentIndex = index;
-                        currentTrackTitle.innerText = filename;
-                        renderPlaylist();
-                    }
-
-                    statusMessage.innerText = `正在准备全校音响同步缓冲...`;
-                    let buffer = audioBuffers[filename];
-                    if (!buffer) {
-                        buffer = await preloadAndDecode(filename);
-                    }
-
-                    if (!buffer || !buffer.duration) {
-                        statusMessage.innerText = "解码未就绪";
-                        return;
-                    }
-
-                    stopAudioNode();
-                    initAudioContext();
-
-                    if (audioCtx && audioCtx.state === 'suspended') {
-                        await audioCtx.resume();
-                    }
-
-                    currentDuration = buffer.duration;
-                    totalTimeText.innerText = formatTime(currentDuration);
-
-                    if (isNaN(startPos) || startPos < 0 || startPos >= currentDuration) {
-                        startPos = 0;
-                    }
-
-                    const currentSourceNode = audioCtx.createBufferSource();
-                    currentSourceNode.buffer = buffer;
-                    currentSourceNode.connect(audioCtx.destination);
-                    
-                    currentSourceNode.onended = () => {
-                        if (currentSource === currentSourceNode) {
-                            currentSource = null;
-                            stopProgressLoop();
-                            isPlaying = false;
-                            updatePlayButtonUI(false);
-                        }
-                    };
-
-                    currentSource = currentSourceNode;
-                    startPositionOffset = startPos;
-
-                    const targetLocalTime = targetServerTime - timeOffset;
-                    const targetAudioTime = audioCtx.currentTime + Math.max(0.1, (targetLocalTime - Date.now()) / 1000);
-                    
-                    try {
-                        currentSourceNode.start(targetAudioTime, startPos);
-                    } catch (e) {
-                        console.error("Audio playback interrupted:", e);
-                        updateAudioEngineUI(false);
-                        return;
-                    }
-
-                    playbackStartedAt = targetAudioTime;
-                    startProgressLoop();
-                    
-                    isPlaying = true;
-                    updatePlayButtonUI(true);
-
-                    if (countdownTimer) clearInterval(countdownTimer);
-
-                    countdownTimer = setInterval(() => {
-                        const nowServer = Date.now() + timeOffset;
-                        const timeLeft = targetServerTime - nowServer;
-
-                        if (timeLeft <= 0) {
-                            clearInterval(countdownTimer);
-                            countdownTimer = null;
-                            statusMessage.innerText = `考场同步播报中`;
-                            playbackStateBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse";
-                            playbackStateBadge.innerText = "▶ 全校统一播报中";
-                        } else {
-                            statusMessage.innerText = `倒计时同步预备: ${(timeLeft / 1000).toFixed(1)} 秒`;
-                            playbackStateBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30";
-                            playbackStateBadge.innerText = "⏱ 时钟对齐中";
-                        }
-                    }, 50);
-                }
-
-                else if (msg.type === 'audio:pause') {
-                    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-                    if (currentSource) {
-                        pauseOffset = startPositionOffset + (audioCtx.currentTime - playbackStartedAt);
-                    }
-                    stopAudioNode();
-                    stopProgressLoop();
-                    
-                    isPlaying = false;
-                    updatePlayButtonUI(false);
-                    statusMessage.innerText = `播报已暂停 (${formatTime(pauseOffset)})`;
-                    playbackStateBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30";
-                    playbackStateBadge.innerText = "⏸ 已暂停";
-                }
-
-                else if (msg.type === 'audio:stop') {
-                    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-                    stopAudioNode();
-                    stopProgressLoop();
-                    pauseOffset = 0;
-                    updateProgressUI(0, 0);
-                    
-                    isPlaying = false;
-                    updatePlayButtonUI(false);
-                    statusMessage.innerText = '播报已停止';
-                    playbackStateBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-slate-700 text-slate-300";
-                    playbackStateBadge.innerText = "就绪";
-                }
-            };
-        } else {
-            wsBadge.className = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30";
-            wsBadge.innerText = "● 演示模式";
-            statusMessage.innerText = "以无服务器模式运行中";
-        }
-
-        function stopAudioNode() {
+        else if (msg.type === 'audio:pause') {
+            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
             if (currentSource) {
-                try { currentSource.stop(); } catch(e) {}
-                currentSource.disconnect();
-                currentSource = null;
+                pauseOffset = startPositionOffset + (audioCtx.currentTime - playbackStartedAt);
             }
-        }
-
-        function startProgressLoop() {
+            stopAudioNode();
             stopProgressLoop();
-            function update() {
-                if (!currentSource) return;
-                let currentPos = startPositionOffset + (audioCtx.currentTime - playbackStartedAt);
-                if (currentPos >= 0) {
-                    if (currentPos > currentDuration) currentPos = currentDuration;
-                    updateProgressUI(currentPos, currentDuration);
-                }
-                if (currentPos < currentDuration) {
-                    progressAnimId = requestAnimationFrame(update);
-                }
+            
+            isPlaying = false;
+            playPauseBtn.innerText = "▶ 播放";
+            statusText.innerText = `已暂停 (进度: ${formatTime(pauseOffset)})`;
+        }
+
+        else if (msg.type === 'audio:stop') {
+            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+            stopAudioNode();
+            stopProgressLoop();
+            pauseOffset = 0;
+            updateProgressUI(0, 0);
+            
+            isPlaying = false;
+            playPauseBtn.innerText = "▶ 播放";
+            statusText.innerText = '已停止';
+        }
+    };
+
+    function stopAudioNode() {
+        if (currentSource) {
+            try { currentSource.stop(); } catch(e) {}
+            currentSource.disconnect();
+            currentSource = null;
+        }
+    }
+
+    function startProgressLoop() {
+        stopProgressLoop();
+        function update() {
+            if (!currentSource) return;
+            
+            let currentPos = startPositionOffset + (audioCtx.currentTime - playbackStartedAt);
+            
+            if (currentPos >= 0) {
+                if (currentPos > currentDuration) currentPos = currentDuration;
+                updateProgressUI(currentPos, currentDuration);
             }
-            progressAnimId = requestAnimationFrame(update);
-        }
 
-        function stopProgressLoop() {
-            if (progressAnimId) {
-                cancelAnimationFrame(progressAnimId);
-                progressAnimId = null;
+            if (currentPos < currentDuration) {
+                progressAnimId = requestAnimationFrame(update);
             }
         }
+        progressAnimId = requestAnimationFrame(update);
+    }
 
-        function updateProgressUI(current, total) {
-            currentTimeText.innerText = formatTime(current);
-            totalTimeText.innerText = formatTime(total);
-            const percent = total > 0 ? (current / total) * 100 : 0;
-            progressBarFill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+    function stopProgressLoop() {
+        if (progressAnimId) {
+            cancelAnimationFrame(progressAnimId);
+            progressAnimId = null;
         }
+    }
 
-        function updatePlayButtonUI(playing) {
-            if (playing) {
-                playPauseBtn.className = "px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-semibold text-sm shadow-lg shadow-amber-500/25 hover:brightness-110 active:scale-95 transition flex items-center space-x-2";
-                playPauseBtn.innerHTML = `<i class="fa-solid fa-pause"></i><span>暂停播报</span>`;
+    function updateProgressUI(current, total) {
+        currentTimeText.innerText = formatTime(current);
+        totalTimeText.innerText = formatTime(total);
+        const percent = total > 0 ? (current / total) * 100 : 0;
+        progressBarFill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+    }
+
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function syncNtp(callback) {
+        const t0 = Date.now();
+        ws.send(JSON.stringify({ type: 'ntp:sync', t0: t0 }));
+        if (callback) setTimeout(callback, 100);
+    }
+
+    function actionWithSync(actionCallback) {
+        initAudioContext();
+        syncNtp(actionCallback);
+    }
+
+    function togglePlayPause() {
+        actionWithSync(() => {
+            if (isPlaying) {
+                pause();
             } else {
-                playPauseBtn.className = "px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold text-sm shadow-lg shadow-emerald-500/25 hover:brightness-110 active:scale-95 transition flex items-center space-x-2";
-                playPauseBtn.innerHTML = `<i class="fa-solid fa-play"></i><span>开始播报</span>`;
+                playSelected();
             }
-        }
+        });
+    }
 
-        function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
+    function playSelected() {
+        if (mp3Files.length === 0) return alert("audio 文件夹下没有 mp3 文件！");
+        const selectedRadio = document.querySelector('input[name="audioFile"]:checked');
+        if (!selectedRadio) return alert("请先选择要播放的曲目！");
 
-        function syncNtp(callback) {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                if (callback) setTimeout(callback, 50);
-                return;
-            }
-            const t0 = Date.now();
-            ws.send(JSON.stringify({ type: 'ntp:sync', t0: t0 }));
-            if (callback) setTimeout(callback, 100);
-        }
+        const filename = selectedRadio.value;
+        ws.send(JSON.stringify({
+            type: 'cmd:play',
+            filename: filename,
+            position: pauseOffset
+        }));
+    }
 
-        function actionWithSync(actionCallback) {
-            initAudioContext();
-            syncNtp(actionCallback);
-        }
+    function pause() { 
+        ws.send(JSON.stringify({ type: 'cmd:pause' })); 
+    }
 
-        function togglePlayPause() {
-            actionWithSync(() => {
-                if (isPlaying) {
-                    pause();
-                } else {
-                    playSelected();
-                }
-            });
-        }
+    function stop() { 
+        pauseOffset = 0;
+        ws.send(JSON.stringify({ type: 'cmd:stop' })); 
+    }
 
-        function playSelected() {
-            if (mp3Files.length === 0) return alert("考场音源目录下没有任何听力试题！");
-            const filename = mp3Files[currentIndex];
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'cmd:play',
-                    filename: filename,
-                    position: pauseOffset
-                }));
-            }
-        }
+    function refreshFileList() { ws.send(JSON.stringify({ type: 'refresh_files' })); }
 
-        function pause() { 
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'cmd:pause' })); 
-            }
+    function renderPlaylist() {
+        if (mp3Files.length === 0) {
+            playlistContainer.innerHTML = '<p style="color:#888; text-align:center;">static/audio/ 目录下未发现 .mp3 文件</p>';
+            return;
         }
+        playlistContainer.innerHTML = '';
+        mp3Files.forEach((file, index) => {
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            const checkedAttr = index === currentIndex ? 'checked' : '';
+            item.innerHTML = `
+                <input type="radio" id="file_${index}" name="audioFile" value="${file}" ${checkedAttr} onchange="onRadioChange(${index})">
+                <label for="file_${index}" style="cursor:pointer; width:100%;">${file}</label>
+            `;
+            playlistContainer.appendChild(item);
+        });
+    }
 
-        function stop() { 
-            pauseOffset = 0;
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'cmd:stop' })); 
-            }
-        }
+    function onRadioChange(index) {
+        currentIndex = index;
+        pauseOffset = 0;
+        const filename = mp3Files[currentIndex];
+        broadcastSelection(filename);
+    }
 
-        function refreshFileList() { 
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'refresh_files' })); 
-            }
-        }
+    function broadcastSelection(filename) {
+        ws.send(JSON.stringify({
+            type: 'cmd:select',
+            filename: filename
+        }));
+    }
 
-        function renderPlaylist() {
-            if (mp3Files.length === 0) {
-                playlistContainer.innerHTML = '<div class="text-center py-6 text-slate-500 text-xs">static/audio/ 目录下无试题文件</div>';
-                return;
-            }
-            playlistContainer.innerHTML = '';
-            mp3Files.forEach((file, index) => {
-                const isSelected = index === currentIndex;
-                const item = document.createElement('div');
-                item.className = `p-3 rounded-xl border transition cursor-pointer flex items-center justify-between text-xs ${
-                    isSelected 
-                        ? 'bg-sky-950/40 border-sky-500/50 text-sky-200' 
-                        : 'bg-slate-900/40 border-slate-700/40 text-slate-300 hover:bg-slate-800/60'
-                }`;
-                item.onclick = () => onSelectTrack(index);
-                item.innerHTML = `
-                    <div class="flex items-center space-x-3 truncate">
-                        <i class="fa-solid ${isSelected ? 'fa-compact-disc text-sky-400 animate-spin' : 'fa-file-audio text-slate-500'} text-sm"></i>
-                        <span class="font-medium truncate">${file}</span>
-                    </div>
-                    ${isSelected ? '<span class="text-[10px] px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">当前选中</span>' : ''}
-                `;
-                playlistContainer.appendChild(item);
-            });
-        }
+    function updateRadioSelection() {
+        const radios = document.getElementsByName('audioFile');
+        if (radios[currentIndex]) radios[currentIndex].checked = true;
+    }
 
-        function onSelectTrack(index) {
-            currentIndex = index;
-            pauseOffset = 0;
-            const filename = mp3Files[currentIndex];
-            currentTrackTitle.innerText = filename;
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'cmd:select',
-                    filename: filename
-                }));
-            }
-        }
+    // 绑定全局点击事件，任意点击页面即可解除浏览器的 AudioContext 拦截
+    document.body.addEventListener('click', () => {
+        initAudioContext();
+    }, { once: false });
+</script>
 
-        document.body.addEventListener('click', () => {
-            initAudioContext();
-        }, { once: false });
-    </script>
 </body>
 </html>
