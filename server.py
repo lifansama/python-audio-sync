@@ -43,6 +43,16 @@ def get_audio_files():
     mp3_files.sort()
     return mp3_files
 
+async def broadcast_client_count():
+    """向所有在线客户端广播当前的连接设备数"""
+    count = len(clients)
+    message = {"type": "client_count", "count": count}
+    for client in list(clients):
+        try:
+            await client.send_json(message)
+        except:
+            clients.discard(client)
+
 @app.get("/")
 async def read_index():
     return FileResponse("static/index.html")
@@ -75,6 +85,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     clients.add(websocket)
     print(f"客户端已连接: {websocket.client}")
+    await broadcast_client_count()
 
     try:
         await websocket.send_json({
@@ -82,7 +93,6 @@ async def websocket_endpoint(websocket: WebSocket):
             "files": get_audio_files()
         })
 
-        # 新设备加入时的状态同步（已修复 4 秒缓冲位置偏移）
         if playback_state["status"] == "playing" and playback_state["filename"]:
             now = int(time.time() * 1000)
             current_pos = playback_state["start_pos"]
@@ -90,7 +100,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 current_pos += (now - playback_state["target_time"]) / 1000.0
             
             sync_target_time = now + 4000
-            target_pos_at_start = current_pos + 4.0  # 补偿 4 秒缓冲推进量
+            target_pos_at_start = current_pos + 4.0
 
             await websocket.send_json({
                 "type": "audio:schedule_play",
@@ -199,6 +209,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         clients.remove(websocket)
         print(f"客户端已断开: {websocket.client}")
+        await broadcast_client_count()
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
