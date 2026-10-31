@@ -327,16 +327,12 @@
                     updateRadioSelection();
                 }
 
-                // ==========================================
-                // 阶段一：先无条件加载与解码，不管目标时间
-                // ==========================================
                 statusText.innerText = `正在下载与解码音频: ${filename}...`;
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
                 
                 let buffer = audioBuffers[filename];
                 if (!buffer) {
-                    // 强制等待，直到文件完全下载并解码成功
                     buffer = await preloadAndDecode(filename);
                 }
 
@@ -350,13 +346,9 @@
                 currentDuration = buffer.duration;
                 totalTimeText.innerText = formatTime(currentDuration);
 
-                // ==========================================
-                // 阶段二：加载完成后，动态计算时间对齐与倒计时
-                // ==========================================
                 const nowServer = Date.now() + timeOffset;
                 let startPos = basePosition;
                 
-                // 如果在下载解码期间，原定的目标播放时间已经过了，则根据超出的时间自动计算当前应该播到哪
                 if (nowServer >= targetServerTime) {
                     const elapsedServerSeconds = (nowServer - targetServerTime) / 1000;
                     startPos = basePosition + elapsedServerSeconds;
@@ -394,7 +386,6 @@
                 currentSource = currentSourceNode;
                 startPositionOffset = startPos;
 
-                // 重新获取最新的服务器时间评估剩余缓冲
                 const freshNowServer = Date.now() + timeOffset;
                 const timeLeft = targetServerTime - freshNowServer;
 
@@ -403,7 +394,6 @@
                     const targetLocalTime = targetServerTime - timeOffset;
                     targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
                 } else {
-                    // 如果下载占用过多时间，给予 0.05s 的微调缓冲立刻开播
                     targetAudioTime = audioCtx.currentTime + 0.05;
                 }
                 
@@ -532,7 +522,8 @@
         syncNtp(actionCallback);
     }
 
-    async function uploadAudioFile() {
+    // 💡 改造后的带实时进度提示的上传函数
+    function uploadAudioFile() {
         const fileInput = document.getElementById('mp3File');
         if (fileInput.files.length === 0) return;
 
@@ -540,20 +531,50 @@
         const formData = new FormData();
         formData.append("file", file);
 
-        statusText.innerText = `正在上传 ${file.name}...`;
-        try {
-            const response = await fetch('/upload', { method: 'POST', body: formData });
-            const result = await response.json();
-            if (result.success) {
-                statusText.innerText = `上传成功: ${result.filename}`;
-                fileInput.value = '';
-            } else {
-                statusText.innerText = `上传失败: ${result.message}`;
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/upload", true);
+
+        // 监听上传进度
+        xhr.upload.onprogress = function(event) {
+            if (event.lengthComputable) {
+                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                statusText.innerText = `正在上传 ${file.name} : ${percentComplete}%`;
+                statusText.style.color = "#007bff";
+                statusText.style.background = "#e9f3ff";
             }
-        } catch (e) {
-            statusText.innerText = `上传出错`;
-            console.error(e);
-        }
+        };
+
+        // 上传成功回调
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    if (result.success) {
+                        statusText.innerText = `上传成功: ${result.filename}`;
+                        fileInput.value = '';
+                    } else {
+                        statusText.innerText = `上传失败: ${result.message}`;
+                        statusText.style.color = "#856404";
+                        statusText.style.background = "#fff3cd";
+                    }
+                } catch (e) {
+                    statusText.innerText = `解析响应出错`;
+                }
+            } else {
+                statusText.innerText = `上传出错 (服务器状态码: ${xhr.status})`;
+                statusText.style.color = "#856404";
+                statusText.style.background = "#fff3cd";
+            }
+        };
+
+        // 网络异常回调
+        xhr.onerror = function() {
+            statusText.innerText = `网络连接异常，上传失败`;
+            statusText.style.color = "#856404";
+            statusText.style.background = "#fff3cd";
+        };
+
+        xhr.send(formData);
     }
 
     function togglePlayPause() {
