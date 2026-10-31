@@ -94,7 +94,7 @@
         </div>
     </div>
 
-    <!-- 移至最底部的上传新 MP3 模块 -->
+    <!-- 最底部的上传新 MP3 模块 -->
     <div class="upload-box">
         <label for="mp3File"><strong>上传新的 MP3 文件：</strong></label>
         <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
@@ -327,17 +327,44 @@
                     updateRadioSelection();
                 }
 
-                statusText.innerText = `正在准备考场音频缓存...`;
+                // ==========================================
+                // 阶段一：先无条件加载与解码，不管目标时间
+                // ==========================================
+                statusText.innerText = `正在下载与解码音频: ${filename}...`;
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
                 
                 let buffer = audioBuffers[filename];
                 if (!buffer) {
+                    // 强制等待，直到文件完全下载并解码成功
                     buffer = await preloadAndDecode(filename);
                 }
 
                 if (!buffer || !buffer.duration) {
-                    statusText.innerText = "音频解码未完成，请点击播放按钮";
+                    statusText.innerText = "⚠️ 音频加载或解码失败，请检查网络";
+                    statusText.style.color = "#856404";
+                    statusText.style.background = "#fff3cd";
+                    return;
+                }
+
+                currentDuration = buffer.duration;
+                totalTimeText.innerText = formatTime(currentDuration);
+
+                // ==========================================
+                // 阶段二：加载完成后，动态计算时间对齐与倒计时
+                // ==========================================
+                const nowServer = Date.now() + timeOffset;
+                let startPos = basePosition;
+                
+                // 如果在下载解码期间，原定的目标播放时间已经过了，则根据超出的时间自动计算当前应该播到哪
+                if (nowServer >= targetServerTime) {
+                    const elapsedServerSeconds = (nowServer - targetServerTime) / 1000;
+                    startPos = basePosition + elapsedServerSeconds;
+                }
+
+                if (isNaN(startPos) || startPos < 0) startPos = 0;
+                if (startPos >= currentDuration) {
+                    statusText.innerText = `⚠️ 该音频已播放完毕`;
                     return;
                 }
 
@@ -346,23 +373,6 @@
                 
                 if (audioCtx && audioCtx.state === 'suspended') {
                     await audioCtx.resume();
-                }
-
-                currentDuration = buffer.duration;
-                totalTimeText.innerText = formatTime(currentDuration);
-
-                const nowServer = Date.now() + timeOffset;
-                let startPos = basePosition;
-                
-                if (nowServer >= targetServerTime) {
-                    const elapsedServerSeconds = (nowServer - targetServerTime) / 1000;
-                    startPos = basePosition + elapsedServerSeconds;
-                }
-
-                if (isNaN(startPos) || startPos < 0) startPos = 0;
-                if (startPos >= currentDuration) {
-                    statusText.innerText = `列表已播放完毕`;
-                    return;
                 }
 
                 const currentSourceNode = audioCtx.createBufferSource();
@@ -384,13 +394,16 @@
                 currentSource = currentSourceNode;
                 startPositionOffset = startPos;
 
-                let targetAudioTime;
-                const timeLeft = targetServerTime - nowServer;
+                // 重新获取最新的服务器时间评估剩余缓冲
+                const freshNowServer = Date.now() + timeOffset;
+                const timeLeft = targetServerTime - freshNowServer;
 
+                let targetAudioTime;
                 if (timeLeft > 200) {
                     const targetLocalTime = targetServerTime - timeOffset;
                     targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
                 } else {
+                    // 如果下载占用过多时间，给予 0.05s 的微调缓冲立刻开播
                     targetAudioTime = audioCtx.currentTime + 0.05;
                 }
                 
@@ -419,7 +432,7 @@
                             countdownTimer = null;
                             statusText.innerText = `正在播放: ${filename}`;
                         } else {
-                            statusText.innerText = `考场同步倒计时... ${(remaining / 1000).toFixed(2)} 秒`;
+                            statusText.innerText = `加载完成，同步倒计时... ${(remaining / 1000).toFixed(2)} 秒`;
                         }
                     }, 50);
                 } else {
