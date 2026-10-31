@@ -195,7 +195,7 @@
             statusText.style.color = "#007bff";
             statusText.style.background = "#e9f3ff";
             
-            // 💡 编码特殊字符（如 & 和空格），防止 URL 请求被打断
+            // 使用 encodeURIComponent 编码包含空格和 & 符号的特殊文件名
             const response = await fetch(`/static/audio/${encodeURIComponent(filename)}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -319,8 +319,6 @@
             }
 
             else if (msg.type === 'audio:schedule_play') {
-                // 💡 关键点 3：如果本地已经在使用同一 WebAudio 源正常播放，忽略重复指令；
-                // 但如果是新加入的设备（isPlaying 为 false），无条件强制执行同步播放！
                 if (isPlaying && currentSource) {
                     console.log("当前设备已在正常播放中，已忽略重复同步指令");
                     return;
@@ -357,20 +355,6 @@
                 totalTimeText.innerText = formatTime(currentDuration);
 
                 // 2. 动态计算时间轴追赶位置
-                const nowServer = Date.now() + timeOffset;
-                let startPos = basePosition;
-                
-                if (nowServer >= targetServerTime) {
-                    const elapsedServerSeconds = (nowServer - targetServerTime) / 1000;
-                    startPos = basePosition + elapsedServerSeconds;
-                }
-
-                if (isNaN(startPos) || startPos < 0) startPos = 0;
-                if (startPos >= currentDuration) {
-                    statusText.innerText = `⚠️ 该音频已播放完毕`;
-                    return;
-                }
-
                 stopAudioNode();
                 initAudioContext();
                 
@@ -395,19 +379,25 @@
                 };
 
                 currentSource = currentSourceNode;
-                startPositionOffset = startPos;
+                startPositionOffset = basePosition;
 
+                // 💡 修复核心：无论下载解码花了多少秒，加载完成后以“当前最新服务器时间”为基准，
+                // 统一增加极短的 500ms 缓冲齐头并进开播，并把下载耗费的额外时间自动补偿到播放起点中，彻底消除 3~4 秒延迟差。
                 const freshNowServer = Date.now() + timeOffset;
-                const timeLeft = targetServerTime - freshNowServer;
-
-                let targetAudioTime;
-                if (timeLeft > 200) {
-                    const targetLocalTime = targetServerTime - timeOffset;
-                    targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
-                } else {
-                    targetAudioTime = audioCtx.currentTime + 0.05;
-                }
+                const unifiedDelay = 500; // 毫秒
+                const newTargetServerTime = freshNowServer + unifiedDelay;
+                const targetLocalTime = newTargetServerTime - timeOffset;
+                const targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
                 
+                const extraElapsedSeconds = (newTargetServerTime - targetServerTime) / 1000;
+                let startPos = basePosition + extraElapsedSeconds;
+
+                if (isNaN(startPos) || startPos < 0) startPos = 0;
+                if (startPos >= currentDuration) {
+                    statusText.innerText = `⚠️ 该音频已播放完毕`;
+                    return;
+                }
+
                 try {
                     currentSourceNode.start(targetAudioTime, startPos);
                 } catch (e) {
@@ -420,25 +410,9 @@
                 
                 isPlaying = true;
                 playPauseBtn.innerText = "⏸ 暂停";
-
-                if (countdownTimer) clearInterval(countdownTimer);
-
-                if (timeLeft > 200) {
-                    countdownTimer = setInterval(() => {
-                        const currentNowServer = Date.now() + timeOffset;
-                        const remaining = targetServerTime - currentNowServer;
-
-                        if (remaining <= 0) {
-                            clearInterval(countdownTimer);
-                            countdownTimer = null;
-                            statusText.innerText = `正在播放: ${filename}`;
-                        } else {
-                            statusText.innerText = `加载完成，同步倒计时... ${(remaining / 1000).toFixed(2)} 秒`;
-                        }
-                    }, 50);
-                } else {
-                    statusText.innerText = `正在播放: ${filename} (已多设备实时同步)`;
-                }
+                statusText.innerText = `正在播放: ${filename} (已多设备实时同步)`;
+                statusText.style.color = "#28a745";
+                statusText.style.background = "#e8f5e9";
             }
 
             else if (msg.type === 'audio:pause') {
