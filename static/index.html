@@ -195,7 +195,7 @@
             statusText.style.color = "#007bff";
             statusText.style.background = "#e9f3ff";
             
-            // 💡 核心修复 2：使用 encodeURIComponent 编码包含空格和 & 符号的特殊文件名
+            // 💡 编码特殊字符（如 & 和空格），防止 URL 请求被打断
             const response = await fetch(`/static/audio/${encodeURIComponent(filename)}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -214,7 +214,7 @@
         }
     }
 
-    // WebSocket 独立连接与重连管理
+    // WebSocket 连接与重连管理
     function connectWs() {
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
             return;
@@ -235,7 +235,7 @@
                 statusText.style.color = "#28a745";
                 statusText.style.background = "#e8f5e9";
             } else {
-                statusText.innerText = "服务器已连接，随时准备接收考试指令";
+                statusText.innerText = "服务器已连接，随时准备接收广播指令";
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
             }
@@ -257,7 +257,7 @@
             wsStatusElem.className = "badge-offline";
             
             if (isPlaying) {
-                statusText.innerText = "⚠️ 网络闪断，正依靠本地音频安全播放中（考试不受影响）";
+                statusText.innerText = "⚠️ 网络闪断，正依靠本地音频安全播放中";
                 statusText.style.color = "#856404";
                 statusText.style.background = "#fff3cd";
             } else {
@@ -319,8 +319,10 @@
             }
 
             else if (msg.type === 'audio:schedule_play') {
+                // 💡 关键点 3：如果本地已经在使用同一 WebAudio 源正常播放，忽略重复指令；
+                // 但如果是新加入的设备（isPlaying 为 false），无条件强制执行同步播放！
                 if (isPlaying && currentSource) {
-                    console.log("当前正在本地离线安全播放，已忽略重连同步指令");
+                    console.log("当前设备已在正常播放中，已忽略重复同步指令");
                     return;
                 }
 
@@ -334,9 +336,7 @@
                     updateRadioSelection();
                 }
 
-                // ==========================================
-                // 阶段一：先无条件加载与解码，确保 100% 准备就绪
-                // ==========================================
+                // 1. 无条件保证加载与解码完成
                 statusText.innerText = `正在下载与解码音频: ${filename}...`;
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
@@ -356,9 +356,7 @@
                 currentDuration = buffer.duration;
                 totalTimeText.innerText = formatTime(currentDuration);
 
-                // ==========================================
-                // 阶段二：加载完成后，动态计算服务器时间对齐与倒计时
-                // ==========================================
+                // 2. 动态计算时间轴追赶位置
                 const nowServer = Date.now() + timeOffset;
                 let startPos = basePosition;
                 
@@ -535,7 +533,7 @@
         syncNtp(actionCallback);
     }
 
-    // 💡 带实时百分比进度的上传函数 (XMLHttpRequest 实现)
+    // 带百分比进度的上传函数 (XMLHttpRequest 实现)
     function uploadAudioFile() {
         const fileInput = document.getElementById('mp3File');
         if (fileInput.files.length === 0) return;
