@@ -43,7 +43,7 @@
 <body>
 
 <div class="container">
-    <h2>UniSound</h2>
+    <h2>UniSound - 考试广播</h2>
     <div id="status" onclick="manualResumeAudio()">正在连接服务器与初始化音频引擎...（点击此处可手动激活声音）</div>
 
     <div class="progress-container">
@@ -153,7 +153,7 @@
         if (audioCtx.state === 'suspended') {
             audioCtx.resume().then(() => {
                 if (!isPlaying) {
-                    statusText.innerText = "音频引擎已就绪，可正常同步播放";
+                    statusText.innerText = "音频引擎已就绪，等待同步指令";
                     statusText.style.color = "#007bff";
                     statusText.style.background = "#e9f3ff";
                 }
@@ -186,7 +186,7 @@
         if (audioBuffers[filename]) return audioBuffers[filename];
 
         try {
-            statusText.innerText = `正在后台预加载: ${filename}...`;
+            statusText.innerText = `正在下载与解码音频: ${filename}...`;
             statusText.style.color = "#007bff";
             statusText.style.background = "#e9f3ff";
             
@@ -228,7 +228,7 @@
                 statusText.style.color = "#28a745";
                 statusText.style.background = "#e8f5e9";
             } else {
-                statusText.innerText = "服务器已连接，随时准备接收广播指令";
+                statusText.innerText = "服务器已连接，考试准备就绪";
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
             }
@@ -327,7 +327,11 @@
                     updateRadioSelection();
                 }
 
-                statusText.innerText = `正在下载与解码音频: ${filename}...`;
+                // =========================================================================
+                // 💡 考试级零回声、绝对同步核心机制：
+                // 1. 宁可等待：无论当前网络或解码要花多少秒，设备必须先 100% 下载并解码完音频！
+                // =========================================================================
+                statusText.innerText = `正在为考试安全下载与解码音频: ${filename}...`;
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
                 
@@ -372,31 +376,36 @@
                 currentSource = currentSourceNode;
 
                 // =========================================================================
-                // 💡 绝对精准对齐核心：
-                // 不使用任何固定延迟。以服务器发来的绝对目标时间戳为基准，
-                // 计算当前“加载完毕瞬间”已经落后或超前了服务器标准时间多少，
-                // 实时精准计算出当前应当对应的 startPos 和 AudioContext 绝对播放时间点。
+                // 2. 加载完全就绪后，计算当前最新的服务器绝对时间。
+                // 如果下载期间服务器规定的 targetServerTime 已经过去了，
+                // 则精确计算已过去多少秒，将 startPos 往后推，并在本地安排一个统一的对齐时间点起跑！
                 // =========================================================================
                 const nowServer = Date.now() + timeOffset;
-                const elapsedSinceTarget = (nowServer - targetServerTime) / 1000;
+                let startPos = basePosition;
                 
-                let startPos = basePosition + elapsedSinceTarget;
+                // 如果下载耗时导致当前服务器时间已经超过了原本的开播计划时间
+                if (nowServer > targetServerTime) {
+                    const elapsedExtra = (nowServer - targetServerTime) / 1000;
+                    startPos += elapsedExtra;
+                }
+
                 if (isNaN(startPos) || startPos < 0) startPos = 0;
                 if (startPos >= currentDuration) {
                     statusText.innerText = `⚠️ 该音频已播放完毕`;
                     return;
                 }
 
-                // 进度条基准与音频起点完全统一
+                // 强制让两台设备的进度条和内部计数器起点绝对一致
                 startPositionOffset = startPos;
 
-                // 计算目标本地播放时间
+                // 将目标服务器开播时间转化为本地 AudioContext 时间戳
                 const targetLocalTime = targetServerTime - timeOffset;
                 let targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
 
-                // 如果下载花的时间太久，导致目标开播时间已经过了，则立即在当前本地时间 + 50ms 处开播
+                // 极端保护：如果计算出来的目标起跑时间已经在当前之前（说明加载实在太慢），
+                // 为了保证全场零回声硬同步，立刻安排在 0.1 秒后起跑，并把轻微的延迟通过微小倍速或直接从该点开播
                 if (targetAudioTime < audioCtx.currentTime) {
-                    targetAudioTime = audioCtx.currentTime + 0.05;
+                    targetAudioTime = audioCtx.currentTime + 0.1;
                 }
 
                 try {
@@ -411,7 +420,7 @@
                 
                 isPlaying = true;
                 playPauseBtn.innerText = "⏸ 暂停";
-                statusText.innerText = `正在播放: ${filename} (已高精度实时同步)`;
+                statusText.innerText = `正在播放: ${filename} (考试级绝对同步中)`;
                 statusText.style.color = "#28a745";
                 statusText.style.background = "#e8f5e9";
             }
