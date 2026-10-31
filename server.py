@@ -26,7 +26,7 @@ AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 clients = set()
 
 playback_state = {
-    "status": "stopped",       # "playing", "paused", "stopped"
+    "status": "stopped",
     "filename": None,
     "target_time": 0,
     "start_pos": 0.0
@@ -44,7 +44,6 @@ def get_audio_files():
     return mp3_files
 
 async def broadcast_client_count():
-    """向所有在线客户端广播当前的连接设备数"""
     count = len(clients)
     message = {"type": "client_count", "count": count}
     for client in list(clients):
@@ -88,20 +87,17 @@ async def websocket_endpoint(websocket: WebSocket):
     await broadcast_client_count()
 
     try:
-        # 1. 下发最新文件列表
         await websocket.send_json({
             "type": "audio_list",
             "files": get_audio_files()
         })
 
-        # 2. 💡【核心修复】新设备连入时，只要有选中的文件，先下发选中及预加载指令
         if playback_state["filename"]:
             await websocket.send_json({
                 "type": "audio:select",
                 "filename": playback_state["filename"]
             })
 
-        # 3. 根据当前播放状态下发同步播放或暂停指令
         if playback_state["status"] == "playing":
             now = int(time.time() * 1000)
             current_pos = playback_state["start_pos"]
@@ -123,7 +119,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 "type": "audio:pause"
             })
 
-        # 4. 消息监听循环
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
@@ -136,37 +131,25 @@ async def websocket_endpoint(websocket: WebSocket):
                     "t1": t1,
                     "t2": int(time.time() * 1000)
                 })
-
             elif msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
-
             elif msg_type == "refresh_files":
                 await websocket.send_json({
                     "type": "audio_list",
                     "files": get_audio_files()
                 })
-
             elif msg_type == "cmd:select":
                 filename = data.get("filename")
                 playback_state["filename"] = filename
                 playback_state["start_pos"] = 0.0
-
-                message = {
-                    "type": "audio:select",
-                    "filename": filename
-                }
+                message = {"type": "audio:select", "filename": filename}
                 for client in list(clients):
-                    try:
-                        await client.send_json(message)
-                    except:
-                        clients.discard(client)
-
+                    try: await client.send_json(message)
+                    except: clients.discard(client)
             elif msg_type == "cmd:play":
                 filename = data.get("filename")
                 start_position = data.get("position", 0.0)
-                
-                delay = 6000  
-                target_time = int(time.time() * 1000) + delay
+                target_time = int(time.time() * 1000) + 6000
 
                 playback_state["status"] = "playing"
                 playback_state["filename"] = filename
@@ -181,36 +164,26 @@ async def websocket_endpoint(websocket: WebSocket):
                     "position": start_position
                 }
                 for client in list(clients):
-                    try:
-                        await client.send_json(message)
-                    except:
-                        clients.discard(client)
-
+                    try: await client.send_json(message)
+                    except: clients.discard(client)
             elif msg_type == "cmd:pause":
                 if playback_state["status"] == "playing":
                     now = int(time.time() * 1000)
                     if now >= playback_state["target_time"]:
                         playback_state["start_pos"] += (now - playback_state["target_time"]) / 1000.0
                 playback_state["status"] = "paused"
-
                 message = {"type": "audio:pause"}
                 for client in list(clients):
-                    try:
-                        await client.send_json(message)
-                    except:
-                        clients.discard(client)
-
+                    try: await client.send_json(message)
+                    except: clients.discard(client)
             elif msg_type == "cmd:stop":
                 playback_state["status"] = "stopped"
                 playback_state["filename"] = None
                 playback_state["start_pos"] = 0.0
-
                 message = {"type": "audio:stop"}
                 for client in list(clients):
-                    try:
-                        await client.send_json(message)
-                    except:
-                        clients.discard(client)
+                    try: await client.send_json(message)
+                    except: clients.discard(client)
 
     except WebSocketDisconnect:
         clients.remove(websocket)
