@@ -18,7 +18,7 @@ async def add_security_headers(request: Request, call_next):
     )
     return response
 
-# 定义支持的年级/频道列表（改为 g1, g2, g3），并为每个年级初始化独立的目录与状态
+# 定义支持的年级频道列表，并为每个年级初始化独立的目录与状态
 GRADES = ["g1", "g2", "g3", "default"]
 grade_states = {}
 
@@ -35,9 +35,6 @@ for grade in GRADES:
             "start_pos": 0.0
         }
     }
-
-# 挂载通用静态文件
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 def get_grade_from_host(host: str) -> str:
     """根据访问的域名（Host 头）自动识别年级，支持 g1, g2, g3"""
@@ -75,7 +72,7 @@ async def broadcast_client_count(grade: str):
 async def read_index():
     return FileResponse("static/index.html")
 
-# 隔离音频文件获取路由
+# 💡 核心修复 1：必须将自定义音频路由写在 app.mount 前面，优先拦截处理多域名/多目录隔离
 @app.get("/static/audio/{filename}")
 async def get_audio_file(request: Request, filename: str):
     host = request.headers.get("host", "")
@@ -84,6 +81,9 @@ async def get_audio_file(request: Request, filename: str):
     if file_path.exists():
         return FileResponse(file_path)
     return {"error": "File not found"}, 404
+
+# 挂载通用静态文件（用于加载 index.html 等）
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.post("/upload")
 async def upload_audio(request: Request, file: UploadFile = File(...)):
