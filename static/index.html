@@ -9,7 +9,7 @@
         h2 { margin-top: 0; color: #333; }
         #status { font-size: 14px; font-weight: bold; color: #007bff; background: #e9f3ff; padding: 10px; border-radius: 6px; cursor: pointer; transition: 0.3s; }
         
-        .upload-box { margin: 15px 0; padding: 12px; background: #f8f9fa; border: 2px dashed #cbd3da; border-radius: 6px; text-align: left; font-size: 13px; }
+        .upload-box { margin: 20px 0 5px 0; padding: 12px; background: #f8f9fa; border: 2px dashed #cbd3da; border-radius: 6px; text-align: left; font-size: 13px; }
         .upload-box input { width: 100%; margin-top: 5px; }
 
         .progress-container { margin: 20px 0; text-align: left; }
@@ -70,25 +70,15 @@
         <button onclick="actionWithSync(() => stop())" class="btn-danger">停止</button>
     </div>
 
-    <!-- 上传新 MP3 模块 -->
-    <div class="upload-box">
-        <label for="mp3File"><strong>上传新的 MP3 文件：</strong></label>
-        <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
-    </div>
-
-    <!-- 底部状态与监控面板 -->
+    <!-- 监控面板 -->
     <div class="monitor-panel">
         <div class="monitor-item">
-            <span>在线连接设备数：</span>
-            <span id="clientCountVal" style="font-weight: bold; color: #007bff;">1 台</span>
+            <span>音频引擎状态：</span>
+            <span id="audioStateVal" class="audio-badge-inactive" onclick="manualResumeAudio()">请点击这里激活音频状态</span>
         </div>
         <div class="monitor-item">
             <span>WebSocket 连接状态：</span>
             <span id="wsStatus" class="badge-offline" onclick="connectWs()">点击尝试重新连接</span>
-        </div>
-        <div class="monitor-item">
-            <span>音频引擎状态：</span>
-            <span id="audioStateVal" class="audio-badge-inactive" onclick="manualResumeAudio()">请点击这里激活音频状态</span>
         </div>
         <div class="monitor-item">
             <span>NTP 时钟偏移 (Time Offset)：</span>
@@ -98,6 +88,16 @@
             <span>网络往返延迟 (RTT)：</span>
             <span id="ntpRttVal">-- ms</span>
         </div>
+        <div class="monitor-item">
+            <span>在线连接设备数：</span>
+            <span id="clientCountVal" style="font-weight: bold; color: #007bff;">1 台</span>
+        </div>
+    </div>
+
+    <!-- 移至最底部的上传新 MP3 模块 -->
+    <div class="upload-box">
+        <label for="mp3File"><strong>上传新的 MP3 文件：</strong></label>
+        <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
     </div>
 </div>
 
@@ -223,7 +223,6 @@
             wsStatusElem.innerText = "已连接 (Online)";
             wsStatusElem.className = "badge-online";
             
-            // 💡 网络恢复且连接成功后：根据当前播放状态自动重置顶部提示栏颜色与文案
             if (isPlaying) {
                 statusText.innerText = "✅ 网络已恢复，正通过本地缓存安全播放中";
                 statusText.style.color = "#28a745";
