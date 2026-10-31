@@ -1,7 +1,7 @@
 {
   "build": {
-    "devPath": "https://room.lfn.moe",
-    "distDir": "https://room.lfn.moe"
+    "devPath": "https://g3.lfn.moe",
+    "distDir": "https://g3.lfn.moe"
   },
   "package": {
     "productName": "UniSound by drpe26",
