@@ -18,7 +18,7 @@ async def add_security_headers(request: Request, call_next):
     )
     return response
 
-# 定义支持的年级频道列表，并为每个年级初始化独立的目录与状态
+# 定义支持的年级频道列表（g1, g2, g3），并为每个年级初始化独立的目录与状态
 GRADES = ["g1", "g2", "g3", "default"]
 grade_states = {}
 
@@ -72,7 +72,7 @@ async def broadcast_client_count(grade: str):
 async def read_index():
     return FileResponse("static/index.html")
 
-# 💡 核心修复 1：必须将自定义音频路由写在 app.mount 前面，优先拦截处理多域名/多目录隔离
+# 💡 关键点 1：必须把自定义音频路由写在 app.mount 之前，确保优先拦截处理多域名/多目录隔离
 @app.get("/static/audio/{filename}")
 async def get_audio_file(request: Request, filename: str):
     host = request.headers.get("host", "")
@@ -82,7 +82,7 @@ async def get_audio_file(request: Request, filename: str):
         return FileResponse(file_path)
     return {"error": "File not found"}, 404
 
-# 挂载通用静态文件（用于加载 index.html 等）
+# 挂载通用静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.post("/upload")
@@ -132,15 +132,15 @@ async def websocket_endpoint(websocket: WebSocket):
             "files": get_audio_files(grade)
         })
 
-        # 2. 同步当前年级的选中状态
-        if playback_state["filename"]:
+        # 2. 如果当前有选中的文件（但处于 stopped/paused 状态），下发选中通知
+        if playback_state["filename"] and playback_state["status"] != "playing":
             await websocket.send_json({
                 "type": "audio:select",
                 "filename": playback_state["filename"]
             })
 
-        # 3. 同步当前年级的播放/暂停状态
-        if playback_state["status"] == "playing":
+        # 3. 💡 关键点 2：如果服务器正处于 playing 状态，立刻下发 schedule_play，由前端自动完成“下载+解码+追赶时间播放”
+        if playback_state["status"] == "playing" and playback_state["filename"]:
             now = int(time.time() * 1000)
             current_pos = playback_state["start_pos"]
             if now >= playback_state["target_time"]:
