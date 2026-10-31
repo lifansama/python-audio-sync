@@ -29,11 +29,9 @@
         .controls button.btn-danger { background: #dc3545; }
         .controls button.btn-warning { background: #ffc107; color: #212529; }
 
-        /* 底部监控面板样式 */
         .monitor-panel { margin-top: 20px; padding: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; font-size: 12px; text-align: left; color: #495057; }
         .monitor-item { display: flex; justify-content: space-between; margin: 6px 0; align-items: center; }
         
-        /* 动态连接与音频状态徽章 */
         .badge-online { color: #28a745; font-weight: bold; }
         .badge-offline { color: #dc3545; font-weight: bold; cursor: pointer; background: #f8d7da; padding: 2px 6px; border-radius: 4px; animation: pulse 1.5s infinite; }
         .audio-badge-active { color: #28a745; font-weight: bold; cursor: pointer; }
@@ -71,7 +69,6 @@
         <button onclick="actionWithSync(() => stop())" class="btn-danger">停止</button>
     </div>
 
-    <!-- 监控面板 -->
     <div class="monitor-panel">
         <div class="monitor-item">
             <span>音频引擎状态：</span>
@@ -95,7 +92,6 @@
         </div>
     </div>
 
-    <!-- 最底部的上传新 MP3 模块 -->
     <div class="upload-box">
         <label for="mp3File"><strong>上传新的 MP3 文件：</strong></label>
         <input type="file" id="mp3File" accept=".mp3" onchange="uploadAudioFile()">
@@ -111,7 +107,6 @@
     const totalTimeText = document.getElementById('totalTime');
     const playPauseBtn = document.getElementById('playPauseBtn');
     
-    // 监控面板 DOM 元素
     const wsStatusElem = document.getElementById('wsStatus');
     const clientCountElem = document.getElementById('clientCountVal');
     const audioStateValElem = document.getElementById('audioStateVal');
@@ -213,7 +208,6 @@
         }
     }
 
-    // WebSocket 连接与重连管理
     function connectWs() {
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
             return;
@@ -333,7 +327,6 @@
                     updateRadioSelection();
                 }
 
-                // 1. 无条件保证加载与解码完成
                 statusText.innerText = `正在下载与解码音频: ${filename}...`;
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
@@ -353,7 +346,6 @@
                 currentDuration = buffer.duration;
                 totalTimeText.innerText = formatTime(currentDuration);
 
-                // 2. 动态计算时间轴与进度条对齐位置
                 stopAudioNode();
                 initAudioContext();
                 
@@ -379,24 +371,33 @@
 
                 currentSource = currentSourceNode;
 
-                // 💡 修复核心：计算精确的最终开播偏移量，并把该偏移量同时赋给 startPositionOffset
-                const freshNowServer = Date.now() + timeOffset;
-                const unifiedDelay = 500; // 毫秒缓冲
-                const newTargetServerTime = freshNowServer + unifiedDelay;
-                const targetLocalTime = newTargetServerTime - timeOffset;
-                const targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
+                // =========================================================================
+                // 💡 绝对精准对齐核心：
+                // 不使用任何固定延迟。以服务器发来的绝对目标时间戳为基准，
+                // 计算当前“加载完毕瞬间”已经落后或超前了服务器标准时间多少，
+                // 实时精准计算出当前应当对应的 startPos 和 AudioContext 绝对播放时间点。
+                // =========================================================================
+                const nowServer = Date.now() + timeOffset;
+                const elapsedSinceTarget = (nowServer - targetServerTime) / 1000;
                 
-                const extraElapsedSeconds = (newTargetServerTime - targetServerTime) / 1000;
-                let startPos = basePosition + extraElapsedSeconds;
-
+                let startPos = basePosition + elapsedSinceTarget;
                 if (isNaN(startPos) || startPos < 0) startPos = 0;
                 if (startPos >= currentDuration) {
                     statusText.innerText = `⚠️ 该音频已播放完毕`;
                     return;
                 }
 
-                // 关键同步：让进度条起始基准与实际音频播放起点严格一致
+                // 进度条基准与音频起点完全统一
                 startPositionOffset = startPos;
+
+                // 计算目标本地播放时间
+                const targetLocalTime = targetServerTime - timeOffset;
+                let targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
+
+                // 如果下载花的时间太久，导致目标开播时间已经过了，则立即在当前本地时间 + 50ms 处开播
+                if (targetAudioTime < audioCtx.currentTime) {
+                    targetAudioTime = audioCtx.currentTime + 0.05;
+                }
 
                 try {
                     currentSourceNode.start(targetAudioTime, startPos);
@@ -410,7 +411,7 @@
                 
                 isPlaying = true;
                 playPauseBtn.innerText = "⏸ 暂停";
-                statusText.innerText = `正在播放: ${filename} (已多设备实时同步)`;
+                statusText.innerText = `正在播放: ${filename} (已高精度实时同步)`;
                 statusText.style.color = "#28a745";
                 statusText.style.background = "#e8f5e9";
             }
@@ -507,7 +508,6 @@
         syncNtp(actionCallback);
     }
 
-    // 带百分比进度的上传函数 (XMLHttpRequest 实现)
     function uploadAudioFile() {
         const fileInput = document.getElementById('mp3File');
         if (fileInput.files.length === 0) return;
