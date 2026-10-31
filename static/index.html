@@ -195,7 +195,6 @@
             statusText.style.color = "#007bff";
             statusText.style.background = "#e9f3ff";
             
-            // 使用 encodeURIComponent 编码包含空格和 & 符号的特殊文件名
             const response = await fetch(`/static/audio/${encodeURIComponent(filename)}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -354,7 +353,7 @@
                 currentDuration = buffer.duration;
                 totalTimeText.innerText = formatTime(currentDuration);
 
-                // 2. 动态计算时间轴追赶位置
+                // 2. 动态计算时间轴与进度条对齐位置
                 stopAudioNode();
                 initAudioContext();
                 
@@ -379,12 +378,10 @@
                 };
 
                 currentSource = currentSourceNode;
-                startPositionOffset = basePosition;
 
-                // 💡 修复核心：无论下载解码花了多少秒，加载完成后以“当前最新服务器时间”为基准，
-                // 统一增加极短的 500ms 缓冲齐头并进开播，并把下载耗费的额外时间自动补偿到播放起点中，彻底消除 3~4 秒延迟差。
+                // 💡 修复核心：计算精确的最终开播偏移量，并把该偏移量同时赋给 startPositionOffset
                 const freshNowServer = Date.now() + timeOffset;
-                const unifiedDelay = 500; // 毫秒
+                const unifiedDelay = 500; // 毫秒缓冲
                 const newTargetServerTime = freshNowServer + unifiedDelay;
                 const targetLocalTime = newTargetServerTime - timeOffset;
                 const targetAudioTime = audioCtx.currentTime + (targetLocalTime - Date.now()) / 1000;
@@ -397,6 +394,9 @@
                     statusText.innerText = `⚠️ 该音频已播放完毕`;
                     return;
                 }
+
+                // 关键同步：让进度条起始基准与实际音频播放起点严格一致
+                startPositionOffset = startPos;
 
                 try {
                     currentSourceNode.start(targetAudioTime, startPos);
