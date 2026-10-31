@@ -193,14 +193,20 @@
             statusText.innerText = `正在后台预加载: ${filename}...`;
             statusText.style.color = "#007bff";
             statusText.style.background = "#e9f3ff";
-            const response = await fetch(`/static/audio/${filename}`);
+            
+            // 💡 核心修复 2：使用 encodeURIComponent 编码包含空格和 & 符号的特殊文件名
+            const response = await fetch(`/static/audio/${encodeURIComponent(filename)}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const arrayBuffer = await response.arrayBuffer();
             const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
             audioBuffers[filename] = decodedBuffer;
             statusText.innerText = `就绪: ${filename}`;
             return decodedBuffer;
         } catch (e) {
-            statusText.innerText = `⚠️ 音频加载异常（可能网络波动）`;
+            statusText.innerText = `⚠️ 音频加载异常（可能文件损坏或网络波动）`;
             statusText.style.color = "#856404";
             statusText.style.background = "#fff3cd";
             console.error(e);
@@ -327,6 +333,9 @@
                     updateRadioSelection();
                 }
 
+                // ==========================================
+                // 阶段一：先无条件加载与解码，确保 100% 准备就绪
+                // ==========================================
                 statusText.innerText = `正在下载与解码音频: ${filename}...`;
                 statusText.style.color = "#007bff";
                 statusText.style.background = "#e9f3ff";
@@ -346,6 +355,9 @@
                 currentDuration = buffer.duration;
                 totalTimeText.innerText = formatTime(currentDuration);
 
+                // ==========================================
+                // 阶段二：加载完成后，动态计算服务器时间对齐与倒计时
+                // ==========================================
                 const nowServer = Date.now() + timeOffset;
                 let startPos = basePosition;
                 
@@ -522,7 +534,7 @@
         syncNtp(actionCallback);
     }
 
-    // 💡 改造后的带实时进度提示的上传函数
+    // 💡 带实时百分比进度的上传函数 (XMLHttpRequest 实现)
     function uploadAudioFile() {
         const fileInput = document.getElementById('mp3File');
         if (fileInput.files.length === 0) return;
@@ -534,7 +546,6 @@
         const xhr = new XMLHttpRequest();
         xhr.open("POST", "/upload", true);
 
-        // 监听上传进度
         xhr.upload.onprogress = function(event) {
             if (event.lengthComputable) {
                 const percentComplete = Math.round((event.loaded / event.total) * 100);
@@ -544,7 +555,6 @@
             }
         };
 
-        // 上传成功回调
         xhr.onload = function() {
             if (xhr.status === 200) {
                 try {
@@ -567,7 +577,6 @@
             }
         };
 
-        // 网络异常回调
         xhr.onerror = function() {
             statusText.innerText = `网络连接异常，上传失败`;
             statusText.style.color = "#856404";
@@ -613,7 +622,7 @@
 
     function renderPlaylist() {
         if (mp3Files.length === 0) {
-            playlistContainer.innerHTML = '<p style="color:#888; text-align:center;">static/audio/ 目录下未发现 .mp3 文件</p>';
+            playlistContainer.innerHTML = '<p style="color:#888; text-align:center;">对应年级目录下未发现 .mp3 文件</p>';
             return;
         }
         playlistContainer.innerHTML = '';
