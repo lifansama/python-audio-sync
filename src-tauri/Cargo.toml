@@ -1,0 +1,30 @@
+[package]
+name = "unisound"
+version = "0.0.5"
+description = "UniSound Room Client"
+authors = ["hello"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "1", features = ["protocol-asset"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+# 1. 开启链接期优化，消除跨 crate 的冗余代码，极大减小体积并提升性能
+lto = true
+# 2. 将代码生成单元设为 1，虽然会稍微增加编译时间，但能让编译器进行最大程度的全局优化
+codegen-units = 1
+# 3. 开启最高等级的体积优化 (可选 "3" 代表极致性能，"s" 或 "z" 代表极致体积)
+opt-level = "z"
+# 4. 遇到 Panic 时直接终止（Abort），省去展开堆栈的繁琐代码，进一步缩减体积
+panic = "abort"
+# 5. 去除符号表和调试信息
+strip = true

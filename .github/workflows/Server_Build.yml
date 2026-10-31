@@ -2,8 +2,8 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ "master" ] # 当你推送到 main 分支时自动触发构建
-    tags: [ "v*" ]       # 或者打 tag 时触发
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io

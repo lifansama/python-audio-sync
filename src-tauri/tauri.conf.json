@@ -1,0 +1,35 @@
+{
+  "build": {
+    "devPath": "https://room.lfn.moe",
+    "distDir": "https://room.lfn.moe"
+  },
+  "package": {
+    "productName": "UniSound by drpe26",
+    "version": "0.0.6"
+  },
+  "tauri": {
+    "bundle": {
+      "active": true,
+      "identifier": "com.unisound.room",
+      "icon": [
+        "icons/icon.ico"
+      ]
+    },
+    "allowlist": {
+      "all": true
+    },
+    "windows": [
+      {
+        "title": "UniSound",
+        "width": 960,
+        "height": 540,
+        "resizable": true,
+		"maximized": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}
