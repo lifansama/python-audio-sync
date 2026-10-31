@@ -88,12 +88,21 @@ async def websocket_endpoint(websocket: WebSocket):
     await broadcast_client_count()
 
     try:
+        # 1. 下发最新文件列表
         await websocket.send_json({
             "type": "audio_list",
             "files": get_audio_files()
         })
 
-        if playback_state["status"] == "playing" and playback_state["filename"]:
+        # 2. 💡【核心修复】新设备连入时，只要有选中的文件，先下发选中及预加载指令
+        if playback_state["filename"]:
+            await websocket.send_json({
+                "type": "audio:select",
+                "filename": playback_state["filename"]
+            })
+
+        # 3. 根据当前播放状态下发同步播放或暂停指令
+        if playback_state["status"] == "playing":
             now = int(time.time() * 1000)
             current_pos = playback_state["start_pos"]
             if now >= playback_state["target_time"]:
@@ -109,15 +118,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 "filename": playback_state["filename"],
                 "position": target_pos_at_start
             })
-        elif playback_state["status"] == "paused" and playback_state["filename"]:
-            await websocket.send_json({
-                "type": "audio:select",
-                "filename": playback_state["filename"]
-            })
+        elif playback_state["status"] == "paused":
             await websocket.send_json({
                 "type": "audio:pause"
             })
 
+        # 4. 消息监听循环
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
