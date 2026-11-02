@@ -3,7 +3,7 @@ name = "unisound"
 version = "0.0.5"
 description = "UniSound Room Client"
 authors = ["hello"]
-edition = "2021"
+edition = "2024"
 
 [build-dependencies]
 tauri-build = { version = "1", features = [] }
